@@ -40,6 +40,7 @@ namespace HWDPortalMaui
 #endif
 
             builder.Services.AddSingleton<UserInfoService>();
+            builder.Services.AddSingleton<BulletinService>();
 
             return builder.Build();
         }
