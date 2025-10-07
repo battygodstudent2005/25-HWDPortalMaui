@@ -1,0 +1,244 @@
+﻿@inject IJSRuntime JSRuntime
+@using System.IO
+@using Microsoft.Extensions.Logging
+@inject ILogger<FileDownloadModal> Logger
+
+<div class="modal fade" id="fileDownloadModal" tabindex="-1" aria-labelledby="fileDownloadModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="fileDownloadModalLabel">
+                    <i class="bi bi-cloud-download me-2"></i>下載文件
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" @onclick="Close"></button>
+            </div>
+            <div class="modal-body">
+                @if (isLoading)
+                {
+                    <div class="text-center p-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">正在讀取檔案清單...</span>
+                        </div>
+                        <p class="mt-2 text-muted">正在讀取檔案清單...</p>
+                    </div>
+                }
+                else if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="alert alert-danger" role="alert">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i> @errorMessage
+                    </div>
+                }
+                else if (fileList.Any())
+                {
+                    <div class="file-list-container">
+                        <div class="file-list-item list-header">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="selectAllCheckbox" @onchange="ToggleSelectAll" checked="@(fileList.Any() && fileList.All(f => f.IsSelected))" />
+                                <label class="form-check-label" for="selectAllCheckbox">
+                                    <strong>全選</strong>
+                                </label>
+                            </div>
+                            <span>檔案大小</span>
+                        </div>
+                        @foreach (var fileState in fileList)
+                        {
+                            <div class="file-list-item">
+                                <div class="file-info">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="file-@fileState.Name" @bind="fileState.IsSelected" />
+                                        <label class="form-check-label" for="file-@fileState.Name">
+                                            <i class="bi bi-file-earmark-text me-2 fs-5"></i>
+                                            <span class="file-name" title="@fileState.Name">@fileState.Name</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="file-size text-muted">
+                                    @FormatBytes(fileState.Size)
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center p-4">
+                        <i class="bi bi-folder-x display-4 text-muted"></i>
+                        <p class="mt-3 mb-0">資料夾是空的或不存在</p>
+                        <small class="text-muted"><code>@TargetDownloadPath</code></small>
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <div class="me-auto text-muted small">
+                    已選取 @selectedFilesCount 個檔案，總大小: @FormatBytes(selectedFilesSize)
+                </div>
+                <button type="button" class="btn btn-secondary" @onclick="Close">
+                    <i class="bi bi-x-circle me-2"></i>關閉
+                </button>
+                <button type="button" class="btn btn-success" @onclick="DownloadSelectedFiles" disabled="@(isDownloading || selectedFilesCount == 0)">
+                    @if (isDownloading)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        <span>正在準備下載...</span>
+                    }
+                    else
+                    {
+                        <span><i class="bi bi-download me-2"></i>下載選定項目</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    // 下載完成後觸發的事件回呼，用於通知父元件已下載的檔案列表
+    [Parameter] public EventCallback<List<string>> OnDownloadsCompleted { get; set; }
+
+    private string TargetDownloadPath { get; set; } = string.Empty;
+    private List<FileState> fileList = new();
+    private bool isLoading;
+    private bool isDownloading;
+    private string? errorMessage;
+
+    // 用於追蹤每個檔案狀態的內部 class
+    private class FileState
+    {
+        public string Name { get; set; } = string.Empty;
+        public long Size { get; set; }
+        public bool IsSelected { get; set; }
+    }
+
+    // 計算屬性
+    private int selectedFilesCount => fileList.Count(f => f.IsSelected);
+    private long selectedFilesSize => fileList.Where(f => f.IsSelected).Sum(f => f.Size);
+
+    // 從父元件呼叫以顯示 Modal
+    public async Task Show(string targetPath)
+    {
+        // 重設狀態
+        TargetDownloadPath = targetPath;
+        fileList.Clear();
+        errorMessage = null;
+        isLoading = true;
+        isDownloading = false;
+
+        await JSRuntime.InvokeVoidAsync("showBootstrapModal", "fileDownloadModal");
+        StateHasChanged(); // 顯示載入中動畫
+
+        // 異步載入檔案清單
+        await Task.Run(() => LoadFilesFromPath());
+
+        isLoading = false;
+        StateHasChanged();
+    }
+
+    // 關閉 Modal
+    public async Task Close()
+    {
+        await JSRuntime.InvokeVoidAsync("hideBootstrapModal", "fileDownloadModal");
+    }
+
+    // 從指定路徑載入檔案
+    private void LoadFilesFromPath()
+    {
+        try
+        {
+            if (!Directory.Exists(TargetDownloadPath))
+            {
+                errorMessage = $"指定的目錄不存在: {TargetDownloadPath}";
+                return;
+            }
+
+            var directoryInfo = new DirectoryInfo(TargetDownloadPath);
+            foreach (var file in directoryInfo.GetFiles())
+            {
+                fileList.Add(new FileState
+                {
+                    Name = file.Name,
+                    Size = file.Length,
+                    IsSelected = false
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "讀取目錄 {DirPath} 失敗", TargetDownloadPath);
+            errorMessage = $"讀取檔案清單時發生錯誤: {ex.Message}";
+        }
+    }
+
+    // 全選/取消全選
+    private void ToggleSelectAll(ChangeEventArgs e)
+    {
+        var isChecked = (bool)(e.Value ?? false);
+        foreach (var file in fileList)
+        {
+            file.IsSelected = isChecked;
+        }
+    }
+
+    // 下載所有選定的檔案
+    private async Task DownloadSelectedFiles()
+    {
+        isDownloading = true;
+        StateHasChanged();
+
+        // 建立一個列表來收集將要下載的檔案名稱
+        var downloadedFileNames = new List<string>();
+        var selectedFiles = fileList.Where(f => f.IsSelected).ToList();
+
+        try
+        {
+            foreach (var fileState in selectedFiles)
+            {
+                var filePath = Path.Combine(TargetDownloadPath, fileState.Name);
+                if (File.Exists(filePath))
+                {
+                    var fileBytes = await File.ReadAllBytesAsync(filePath);
+                    using var fileStream = new MemoryStream(fileBytes);
+                    using var streamRef = new DotNetStreamReference(stream: fileStream);
+
+                    await JSRuntime.InvokeVoidAsync("downloadFileFromStream", fileState.Name, streamRef);
+
+                    // 記錄已觸發下載的檔案名稱
+                    downloadedFileNames.Add(fileState.Name);
+                }
+                else
+                {
+                    Logger.LogWarning("嘗試下載的檔案不存在: {FilePath}", filePath);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "下載檔案時發生錯誤");
+            errorMessage = $"下載時發生未預期的錯誤: {ex.Message}";
+        }
+        finally
+        {
+            // 觸發下載完成事件，並將檔案列表傳回
+            if (downloadedFileNames.Any())
+            {
+                await OnDownloadsCompleted.InvokeAsync(downloadedFileNames);
+            }
+            isDownloading = false;
+            StateHasChanged();
+        }
+    }
+
+    // 格式化檔案大小
+    private string FormatBytes(long bytes)
+    {
+        string[] suffixes = { "B", "KB", "MB", "GB", "TB" };
+        int i = 0;
+        double dblSByte = bytes;
+        if (bytes == 0) return "0 B";
+        while (dblSByte >= 1024 && i < suffixes.Length - 1)
+        {
+            dblSByte /= 1024;
+            i++;
+        }
+        return $"{dblSByte:0.##} {suffixes[i]}";
+    }
+}

@@ -1,0 +1,723 @@
+﻿/* Dashboard.razor.css (精簡與修正後版本) */
+
+/* 標籤篩選器的容器 */
+.chip-filter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+/* 單一標籤的基礎樣式 */
+.chip {
+    padding: 0.375rem 0.75rem;
+    border: 1px solid #0d6efd;
+    border-radius: 20px;
+    color: #0d6efd;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+    background-color: #ffffff;
+    font-size: 0.8rem;
+    font-weight: 500;
+    text-align: center;
+    min-width: 50px;
+}
+
+    .chip:hover {
+        background-color: #e7f1ff;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .chip.active {
+        background-color: #0d6efd;
+        color: #fff;
+        font-weight: bold;
+        border-color: #0d6efd;
+        box-shadow: 0 2px 8px rgba(13, 110, 253, 0.3);
+    }
+
+/* 卡片樣式改善 */
+.card.shadow-sm {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+    border: none;
+    border-radius: 0.5rem;
+}
+
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    font-weight: 600;
+    color: #495057;
+    padding: 0.75rem 1rem;
+}
+
+/* 表格容器樣式 */
+.table-container {
+    height: calc(100vh - 280px);
+    overflow: hidden;
+}
+
+.table-responsive {
+    height: 100%;
+    overflow: auto;
+    border-radius: 0;
+}
+
+/* 表格基礎樣式 */
+.table {
+    font-size: 0.8rem;
+    margin-bottom: 0;
+    min-width: 1200px; /* 確保表格有最小寬度以容納所有欄位 */
+}
+
+    .table td, .table th {
+        vertical-align: middle;
+        padding: 0.5rem 0.75rem;
+        border-color: #dee2e6;
+        white-space: nowrap;
+        text-align: center;
+    }
+
+        /* 針對第一欄設定樣式，將寬度鎖定 */
+        .table th:nth-child(1),
+        .table td:nth-child(1) {
+            text-align: left;
+            width: 130px; /* 設定固定寬度 */
+            min-width: 130px; /* 設定最小寬度 */
+            max-width: 130px; /* 設定最大寬度以確保鎖定 */
+            background-color: #f8f9fa;
+            font-weight: 600;
+            position: sticky;
+            left: 0;
+            z-index: 2;
+            border-right: 2px solid #dee2e6;
+        }
+
+        /* 調整第二欄的黏貼位置 */
+        .table th:nth-child(2),
+        .table td:nth-child(2) {
+            text-align: left;
+            min-width: 120px; /* 第二欄的最小寬度維持 120px */
+            background-color: #f8f9fa;
+            position: sticky;
+            left: 130px; /* [重要] 這個值必須等於第一欄的寬度 */
+            z-index: 2;
+            border-right: 2px solid #dee2e6;
+        }
+
+/* 固定表頭樣式 */
+.sticky-header th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background-color: #b3d9ff !important;
+    border-bottom: 2px solid #0d6efd;
+    font-weight: 600;
+}
+
+    .sticky-header th:nth-child(1),
+    .sticky-header th:nth-child(2) {
+        z-index: 11; /* 讓固定的欄位在固定表頭之上 */
+    }
+
+.header-content {
+    font-size: 0.8rem;
+    line-height: 1.2;
+    font-weight: 600;
+}
+
+/* 斑馬條紋效果 */
+.table-striped tbody tr:nth-of-type(odd) {
+    background-color: rgba(0, 0, 0, 0.025);
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(13, 110, 253, 0.075);
+}
+
+/* 儲存格內容樣式 */
+.cell-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    font-size: 0.8rem;
+}
+
+/* 左側兩欄的內容對齊 */
+.table td:nth-child(1) .cell-content,
+.table td:nth-child(2) .cell-content {
+    justify-content: flex-start;
+}
+
+/* 狀態指示器 */
+.status-indicator {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.status-ready {
+    background-color: #28a745;
+    box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.2);
+}
+
+.status-warning {
+    background-color: #ffc107;
+    box-shadow: 0 0 0 2px rgba(255, 193, 7, 0.2);
+}
+
+.status-error {
+    background-color: #dc3545;
+    box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.2);
+}
+
+.status-info {
+    background-color: #17a2b8;
+    box-shadow: 0 0 0 2px rgba(23, 162, 184, 0.2);
+}
+
+/* 載入動畫 */
+.spinner-border {
+    width: 2rem;
+    height: 2rem;
+}
+
+/* 搜尋框樣式 */
+.input-group-sm {
+    font-size: 0.875rem;
+}
+
+.input-group {
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    border-radius: 0.375rem;
+    overflow: hidden;
+}
+
+.input-group-text {
+    background-color: #f8f9fa;
+    border-color: #ced4da;
+    color: #6c757d;
+}
+
+.form-control:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+/* 操作按鈕樣式 */
+.btn {
+    border-radius: 0.375rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+    .btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+
+/* 響應式設計 */
+@media (max-width: 1200px) {
+    .table {
+        min-width: 1000px;
+        font-size: 0.75rem;
+    }
+
+        .table td, .table th {
+            padding: 0.375rem 0.5rem;
+        }
+}
+
+@media (max-width: 992px) {
+    .table-container {
+        height: 500px;
+    }
+
+    .chip {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .table {
+        min-width: 800px;
+        font-size: 0.7rem;
+    }
+
+        .table td, .table th {
+            padding: 0.25rem;
+        }
+
+    .header-content {
+        font-size: 0.7rem;
+    }
+
+    .status-indicator {
+        width: 4px;
+        height: 4px;
+    }
+
+    .table-container {
+        height: 400px;
+    }
+}
+
+/* 空狀態圖示樣式 */
+.bi-inbox, .bi-database {
+    color: #dee2e6;
+}
+
+/* 滾動條樣式 */
+.table-responsive::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.table-responsive::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.table-responsive::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+
+    .table-responsive::-webkit-scrollbar-thumb:hover {
+        background: #a8a8a8;
+    }
+
+/* 側邊欄表單樣式 */
+.form-label {
+    font-weight: 500;
+    color: #495057;
+    margin-bottom: 0.5rem;
+}
+
+.form-select {
+    border-radius: 0.375rem;
+    border-color: #ced4da;
+}
+
+    .form-select:focus {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+    }
+
+/* 資料統計樣式 */
+.card-body.border-bottom {
+    background-color: #f8f9fa;
+    border-color: #e9ecef !important;
+}
+
+/* 當 Item 為空時，套用樣式到該列 "所有" 的儲存格 (td) */
+tr.empty-item-row td {
+    background-color: #cce4ff !important; /* 改為一個更深的藍色 */
+}
+
+/* 同樣將 hover 效果套用到 "所有" 的儲存格 */
+.table-hover tbody tr.empty-item-row:hover td {
+    background-color: #b3d7ff !important; /* 滑鼠移過時的顏色也對應加深 */
+}
+
+/* 為可雙擊的儲存格設定手形指標 */
+.clickable-cell {
+    cursor: pointer;
+}
+
+/* 選中的儲存格樣式 */
+.cell-selected {
+    background-color: #0d6efd !important;
+    color: white !important;
+    font-weight: bold !important;
+    border: 2px solid #0a58ca !important;
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.5) !important;
+    position: relative;
+}
+
+    /* 選中的儲存格內容樣式 */
+    .cell-selected .cell-content {
+        color: white !important;
+    }
+
+    /* 選中的儲存格狀態指示器樣式調整 */
+    .cell-selected .status-indicator {
+        border: 1px solid white;
+    }
+
+/* 確保選中狀態不會被 hover 效果覆蓋 */
+.table-hover tbody tr:hover .cell-selected {
+    background-color: #0d6efd !important;
+    color: white !important;
+}
+
+/* 選中儲存格的動畫效果 */
+.cell-selected {
+    transition: all 0.2s ease-in-out;
+}
+/* Modal 美化樣式 */
+.modal-content {
+    border-radius: 0.75rem; /* 圓角 */
+}
+
+.modal-header {
+    border-top-left-radius: 0.75rem;
+    border-top-right-radius: 0.75rem;
+}
+
+.modal-footer {
+    background-color: #f8f9fa; /* 淺灰色頁腳背景 */
+    border-bottom-left-radius: 0.75rem;
+    border-bottom-right-radius: 0.75rem;
+}
+
+/* 更新詳細資訊區塊樣式 */
+.update-details {
+    margin-top: 1rem;
+}
+
+.details-list {
+    max-height: 150px; /* 設定最大高度，超過會產生捲軸 */
+    overflow-y: auto; /* 內容過多時顯示垂直捲軸 */
+    background-color: #f8f9fa; /* 淺灰色背景 */
+    border: 1px solid #dee2e6; /* 邊框 */
+    border-radius: 0.375rem; /* 圓角 */
+    padding: 0.75rem;
+}
+
+.details-list ul {
+    list-style-type: none; /* 移除項目符號 */
+    padding-left: 0;
+    margin-bottom: 0;
+}
+
+.details-list li {
+    padding: 0.25rem 0.5rem;
+    border-bottom: 1px solid #e9ecef; /* 分隔線 */
+    font-size: 0.9rem;
+}
+
+.details-list li:last-child {
+border-bottom: none; /* 最後一項移除分隔線 */
+}
+
+/* SOW執行狀況卡片樣式 */
+.status-card {
+    background-color: #f8f9fa;
+    border-radius: 0.5rem;
+    padding: 0.5rem;
+    text-align: center;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    border: 2px solid transparent;
+    transition: all 0.2s ease;
+    cursor: pointer; /* [修改] 明確標示為可點擊 */
+}
+
+.status-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.status-number {
+    font-size: 1.5rem;
+    font-weight: bold;
+    line-height: 1;
+    margin-bottom: 0.25rem;
+}
+
+.status-label {
+    font-size: 0.7rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    line-height: 1;
+}
+
+/* 各狀態的顏色主題 */
+.status-card.non-ready {
+    background-color: #f1f5f9;
+    border-color: #cbd5e1;
+}
+
+    .status-card.non-ready .status-number {
+        color: #475569;
+    }
+
+    .status-card.non-ready .status-label {
+        color: #64748b;
+    }
+
+.status-card.ready {
+    background-color: #fef3c7;
+    border-color: #f59e0b;
+}
+
+    .status-card.ready .status-number {
+        color: #d97706;
+    }
+
+    .status-card.ready .status-label {
+        color: #92400e;
+    }
+
+.status-card.checked {
+    background-color: #cffafe;
+    border-color: #06b6d4;
+}
+
+    .status-card.checked .status-number {
+        color: #0891b2;
+    }
+
+    .status-card.checked .status-label {
+        color: #0e7490;
+    }
+
+.status-card.approval {
+    background-color: #d4edda;
+    border-color: #28a745;
+}
+
+    .status-card.approval .status-number {
+        color: #1e7e34;
+    }
+
+    .status-card.approval .status-label {
+        color: #155724;
+    }
+
+.status-card.overdue {
+    background-color: #ffcccc;
+    border-color: #dc3545;
+}
+
+    .status-card.overdue .status-number {
+        color: #c82333;
+    }
+
+    .status-card.overdue .status-label {
+        color: #721c24;
+    }
+
+/* 響應式調整 */
+@media (max-width: 992px) {
+    .status-number {
+        font-size: 1.2rem;
+    }
+
+    .status-label {
+        font-size: 0.65rem;
+    }
+}
+
+/* 緊湊型卡片頭部 */
+.card-header.py-2 {
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+/* 緊湊型卡片內容 */
+.card-body.py-2 {
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+}
+
+/* 緊湊型表單標籤 */
+.form-label.small {
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+/* 緊湊型狀態卡片 */
+.status-card.compact {
+    padding: 0.25rem;
+    min-height: 50px;
+}
+
+    .status-card.compact .status-number {
+        font-size: 1.2rem;
+        margin-bottom: 0.125rem;
+    }
+
+    .status-card.compact .status-label {
+        font-size: 0.65rem;
+        line-height: 1;
+    }
+
+/* 減少整體邊距 */
+.row.g-2 {
+    --bs-gutter-x: 0.5rem;
+    --bs-gutter-y: 0.5rem;
+}
+
+/* 緊湊型按鈕間距 */
+.d-grid.gap-1 {
+    gap: 0.25rem !important;
+}
+
+/* 優化響應式斷點 */
+@media (max-width: 1200px) {
+    .col-lg-5 {
+        flex: 0 0 auto;
+        width: 50%;
+    }
+
+    .col-lg-3 {
+        flex: 0 0 auto;
+        width: 25%;
+    }
+
+    .col-lg-4 {
+        flex: 0 0 auto;
+        width: 25%;
+    }
+}
+
+@media (max-width: 992px) {
+    .status-card.compact .status-number {
+        font-size: 1rem;
+    }
+
+    .status-card.compact .status-label {
+        font-size: 0.6rem;
+    }
+}
+
+/* 右鍵選單 (Context Menu) 樣式 */
+.context-menu {
+    position: fixed; /* 使用 fixed 定位，相對於瀏覽器視窗 */
+    z-index: 1000;
+    width: 220px;
+    background-color: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+    padding: 6px 0;
+    animation: fadeIn 0.1s ease-in-out;
+}
+
+    .context-menu ul li {
+        display: flex;
+        align-items: center;
+        padding: 8px 16px;
+        font-size: 0.85rem;
+        color: #333;
+        cursor: pointer;
+        transition: background-color 0.2s ease, color 0.2s ease;
+    }
+
+    .context-menu ul li:hover {
+        background-color: #0d6efd;
+        color: #ffffff;
+    }
+
+    /* 右鍵選單中禁用選項的樣式 */
+    .context-menu ul li.disabled {
+        color: #adb5bd; /* 柔和的灰色文字 */
+        cursor: not-allowed; /* 顯示禁止的滑鼠指標 */
+        background-color: #f8f9fa; /* 淺灰色背景，使其與其他選項區分 */
+        pointer-events: none; /* [重要] 禁用所有滑鼠事件，使其無法被點擊 */
+    }
+    .context-menu .menu-divider {
+        height: 1px;
+        margin: 6px 0;
+        padding: 0;
+        background-color: #e9ecef;
+    }
+
+    /* 用於標示 "即將推出" 功能的徽章 */
+    .context-menu .soon-badge {
+        font-size: 0.6rem;
+        font-weight: bold;
+        color: #6c757d;
+        background-color: #e9ecef;
+        padding: 2px 5px;
+        border-radius: 4px;
+        margin-left: auto; /* 將其推到最右邊 */
+    }
+
+    .context-menu ul li:hover .soon-badge {
+        background-color: #ffffff;
+        color: #0d6efd;
+    }
+
+
+/* 用於關閉選單的背景覆蓋層 */
+.context-menu-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 999; /* 層級比選單低 */
+    background: transparent; /* 完全透明 */
+}
+
+/* 選單淡入動畫 */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* [新增] 為基礎容器新增過渡動畫效果 */
+.project-info-container {
+    /* 這個 transition 會應用於所有高度、邊距等屬性的變化 */
+    transition: all 0.3s ease-in-out;
+}
+
+/* [修改] 用於最大化/還原的樣式 */
+.project-info-container.maximized {
+    /* [移除] transition 屬性已移至上方的基礎 class */
+    height: calc(100vh - 75px);
+    /* 移除容器可能自帶的邊距 */
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* 當容器最大化時，將 card 設為 flex 容器，使其子元素可以彈性伸展 */
+.project-info-container.maximized .card {
+    height: 100%;
+    width: 100%;
+    border: 2px solid #0d6efd; /* 最大化時加上藍色邊框以示區別 */
+    box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+    display: flex; /* 使用 Flexbox 佈局 */
+    flex-direction: column; /* 設定主軸為垂直方向 */
+}
+
+/* 讓包含表格的 card-body 填滿剩餘的所有垂直空間 */
+.project-info-container.maximized .card-body.p-0 {
+    flex-grow: 1; /* 允許此元素伸展 */
+    min-height: 0; /* 這是 flex 佈局中的一個技巧，確保容器在空間不足時可以正常收縮 */
+}
+
+/* table-container 的高度計算方式，現在只需要填滿其父元素即可 */
+.project-info-container.maximized .table-container {
+    height: 100%; /* 高度設為 100%，使其填滿上層有 flex-grow 的 card-body */
+}
+
+/* [新增] 用於標示篩選器啟用狀態的通用樣式 */
+.status-card.active-filter {
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.5); /* 預設使用醒目的藍色外框 */
+    transform: translateY(-2px); /* 稍微向上浮動，增加立體感 */
+}
+
+/* [新增] 針對 Overdue 卡片啟用時的特定樣式 */
+.status-card.overdue.active-filter {
+    box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.6); /* Overdue 卡片啟用時，使用紅色外框以符合其主題色 */
+}

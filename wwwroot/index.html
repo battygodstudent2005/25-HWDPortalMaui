@@ -25,6 +25,55 @@
     </div>
 
     <script src="_framework/blazor.webview.js" autostart="false"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 定義全域的 showToast 函式
+        window.showToast = (message, type) => {
+            // 根據傳入的 type 決定 icon 和背景顏色
+            const toastDetails = {
+                success: { icon: 'bi-check-circle-fill', bgClass: 'bg-success' },
+                danger: { icon: 'bi-x-circle-fill', bgClass: 'bg-danger' },
+                warning: { icon: 'bi-exclamation-triangle-fill', bgClass: 'bg-warning' },
+                info: { icon: 'bi-info-circle-fill', bgClass: 'bg-info' }
+            };
+
+            const details = toastDetails[type] || toastDetails.info; // 如果 type 無效，預設使用 info
+            const toastContainer = document.querySelector('.toast-container');
+            if (!toastContainer) return;
+
+            // 動態建立 Toast 的 HTML 結構
+            const toastElement = document.createElement('div');
+            toastElement.className = `toast align-items-center text-white ${details.bgClass} border-0`;
+            toastElement.setAttribute('role', 'alert');
+            toastElement.setAttribute('aria-live', 'assertive');
+            toastElement.setAttribute('aria-atomic', 'true');
+
+            toastElement.innerHTML = `
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            <i class="bi ${details.icon} me-2"></i>
+                            ${message}
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                    </div>
+                `;
+
+            // 將建立好的 Toast 元素加入到容器中
+            toastContainer.appendChild(toastElement);
+
+            // 建立 Bootstrap Toast 實例並顯示
+            const toast = new bootstrap.Toast(toastElement, {
+                delay: 5000 // 5 秒後自動消失
+            });
+
+            // 監聽 Toast 關閉事件，並在關閉後從 DOM 中移除元素，避免元素堆積
+            toastElement.addEventListener('hidden.bs.toast', () => {
+                toastElement.remove();
+            });
+
+            toast.show();
+        };
+    </script>
 
 </body>
 

@@ -1,0 +1,2712 @@
+﻿@page "/Dashboard"
+@using System.Data
+@using Microsoft.Data.SqlClient
+@using System.Diagnostics
+@using HWDPortalMaui.Services
+@using HWDPortalMaui.Components.Shared 
+@using Microsoft.Extensions.Configuration
+@inject UserInfoService _userInfoService
+@inject IJSRuntime JSRuntime
+@inject IConfiguration _configuration
+@using System.Text.RegularExpressions
+@using System.IO
+
+
+@* 當 isProjectInfoMaximized 為 true 時，這個區塊會被隱藏 *@
+<div class="row mb-3 g-2 @(isProjectInfoMaximized ? "d-none" : "")">
+    <div class="col-lg-5">
+        <div class="card shadow-sm h-100">
+            <div class="card-header py-2">
+                <i class="bi bi-funnel-fill me-2"></i>篩選條件
+            </div>
+            <div class="card-body py-2">
+                <div class="row g-2">
+                    <div class="col-md-6">
+                        <label for="year-select" class="form-label mb-1 small">選擇年份：</label>
+                        @* 將 @bind 改為 value 和 @onchange 事件處理 *@
+                        <select id="year-select" class="form-select form-select-sm" value="@SelectedYear" @onchange="OnYearChanged">
+                            @foreach (var year in YearList)
+                            {
+                                <option value="@year">@year</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="item-select" class="form-label mb-1 small">選擇部門：</label>
+                        @* 將 @bind 改為 value 和 @onchange 事件處理 *@
+                        <select id="item-select" class="form-select form-select-sm" value="@SelectedHwOption" @onchange="OnDepartmentChanged">
+                            @foreach (var option in AllOptions)
+                            {
+                                <option value="@option">@option</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-2">
+        <div class="card shadow-sm h-100">
+            <div class="card-header py-2">
+                <i class="bi bi-gear-fill me-2"></i>操作設定
+            </div>
+            <div class="card-body py-2">
+                <div class="d-grid gap-1">
+                    <button class="btn btn-info btn-sm" @onclick="OpenAddProjectModal" disabled="@(!(_userInfoService.UserRole == "DM" || _userInfoService.UserRole == "FM"))" title="@((_userInfoService.UserRole == "DM" || _userInfoService.UserRole == "FM") ? "新增專案" : "您的權限不足，無法新增專案")">
+                        <i class="bi bi-plus-circle me-1"></i>新增專案資訊
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-5">
+        <div class="card shadow-sm h-100">
+            <div class="card-header py-2">
+                <i class="bi bi-graph-up me-2"></i>SOW執行狀況
+            </div>
+            <div class="card-body p-1">
+                <div class="row g-1 h-100">
+                    <div class="col-4">
+                        <div class="status-card non-ready compact">
+                            <div class="status-number">@GetStatusCount("Non-Ready")</div>
+                            <div class="status-label">Non-Ready</div>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="status-card ready compact">
+                            <div class="status-number">@GetStatusCount("Ready")</div>
+                            <div class="status-label">Ready</div>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="status-card overdue compact @(isOverdueFilterActive ? "active-filter" : "")" @onclick="ToggleOverdueFilter">
+                            <div class="status-number">@GetStatusCount("Overdue")</div>
+                            <div class="status-label">Overdue</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="status-card checked compact">
+                            <div class="status-number">@GetStatusCount("Checked")</div>
+                            <div class="status-label">Checked</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="status-card approval compact">
+                            <div class="status-number">@GetStatusCount("Approval")</div>
+                            <div class="status-label">Approval</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* 主要內容區塊的容器，根據 isProjectInfoMaximized 動態加上 CSS class *@
+<div class="row">
+    @* 將 project-info-container 移出三元運算子，使其成為基礎 class *@
+    <div class="col-lg-12 project-info-container @(isProjectInfoMaximized ? "maximized" : "")">
+        <div class="card shadow-sm">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>專案資訊</span>
+                @* 將資料時間和最大化按鈕包裝在一個 div 中以便對齊 *@
+                <div class="d-flex align-items-center">
+                    @if (sqlQueryTime != DateTime.MinValue)
+                    {
+                        <small class="text-muted me-3">資料時間: @sqlQueryTime.ToString("yyyy/mm/dd HH:mm:ss")</small>
+                    }
+                    @* 最大化/還原按鈕 *@
+                    <button class="btn btn-sm btn-outline-secondary p-0 lh-1" @onclick="ToggleProjectInfoMaximize" title="@(isProjectInfoMaximized ? "還原" : "最大化")">
+                        <i class="bi @(isProjectInfoMaximized ? "bi-arrows-angle-contract" : "bi-arrows-angle-expand")" style="font-size: 1rem; padding: 0.25rem;"></i>
+                    </button>
+                </div>
+            </div>
+
+            @* 搜尋功能區塊 *@
+            @if (projectData != null && projectData.Rows.Count > 0)
+            {
+                <div class="card-body border-bottom py-2">
+                    <div class="row align-items-center g-2">
+                        @* 專案名稱搜尋框，調整為 col-md-5 *@
+                        <div class="col-md-5">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">
+                                    <i class="bi bi-search"></i>
+                                </span>
+                                @* @oninput 事件處理器改為 FilterProjectData *@
+                                <input type="text" class="form-control" placeholder="篩選專案名稱 (例如 CSLP_PTL)..." @bind="searchTerm" @oninput="FilterProjectData" />
+                                @if (!string.IsNullOrWhiteSpace(searchTerm))
+                                {
+                                    @* @onclick 事件處理器改為 ClearProjectSearch *@
+                                    <button class="btn btn-outline-secondary btn-sm" type="button" @onclick="ClearProjectSearch">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                        @* Item 執行項目搜尋框 *@
+                        <div class="col-md-5">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">
+                                    <i class="bi bi-list-task"></i>
+                                </span>
+                                <input type="text" class="form-control" placeholder="篩選執行項目 (例如 NUDD)..." @bind="itemSearchTerm" @oninput="FilterItemData" />
+                                @if (!string.IsNullOrWhiteSpace(itemSearchTerm))
+                                {
+                                    <button class="btn btn-outline-secondary btn-sm" type="button" @onclick="ClearItemSearch">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                        @* 計數器區塊，調整為 col-md-2 *@
+                        <div class="col-md-2">
+                            <div class="d-flex justify-content-end align-items-center">
+                                <small class="text-muted">
+                                    顯示 @GetProjectCount(filteredData) / @GetProjectCount(projectData) 個專案
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <div class="card-body p-0">
+                <div class="table-container">
+                    @if (isLoading)
+                    {
+                        @* 載入中畫面 *@
+                        <div class="text-center p-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">載入中...</span>
+                            </div>
+                            <p class="mt-2 text-muted">正在載入專案資料...</p>
+                        </div>
+                    }
+                    else if (filteredData != null && filteredData.Rows.Count > 0)
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-hover table-sm table-striped mb-0">
+                                <thead class="table-info sticky-header">
+                                    <tr>
+                                        @foreach (DataColumn col in filteredData.Columns)
+                                        {
+                                            var headerStyle = yellowBackgroundColumns.Contains(col.ColumnName) ? "background-color: #ffff00 !important;" : "";
+                                            var headerClass = (col.ColumnName != "Stage" && col.ColumnName != "Item") ? "clickable-cell" : "";
+                                            <th class="@headerClass"
+                                                style="@headerStyle"
+                                                @onclick="@(() => { if (col.ColumnName != "Stage" && col.ColumnName != "Item") OpenProjectInfoModal(col.ColumnName); })">
+                                                <span class="header-content">@col.ColumnName</span>
+                                            </th>
+                                        }
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (DataRow row in filteredData.Rows)
+                                    {
+                                        var rowClass = (filteredData.Columns.Contains("Item") && string.IsNullOrEmpty(row["Item"].ToString())) ? "empty-item-row" : "";
+                                        <tr class="@rowClass">
+                                            @foreach (DataColumn col in filteredData.Columns)
+                                            {
+                                                var isProjectCell = col.ColumnName != "Stage" && col.ColumnName != "Item";
+                                                var cellClass = isProjectCell ? "clickable-cell" : "";
+                                                var cellValue = row[col].ToString();
+                                                <td class="@($"{cellClass} {(IsCellSelected(row, col) ? "cell-selected" : "")}")"
+                                                    style="@GetCellStyle(cellValue, col.ColumnName)"
+                                                    title="@cellValue"
+                                                    @onclick="() => SelectCell(row, col)"
+                                                    @oncontextmenu:preventDefault
+                                                    @oncontextmenu="@((e) => ShowContextMenu(e, row, col))">
+                                                    <div class="cell-content">
+                                                        @GetStatusIndicator(cellValue)
+                                                        @CleanCellValue(cellValue)
+                                                    </div>
+                                                </td>
+                                            }
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    else if (projectData != null && projectData.Rows.Count > 0 && !string.IsNullOrWhiteSpace(searchTerm))
+                    {
+                        <div class="text-center p-4">
+                            <i class="bi bi-database text-muted" style="font-size: 3rem;"></i>
+                            <p class="mt-2 text-muted">沒有符合搜尋條件的資料</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-center p-4">
+                            <i class="bi bi-inbox text-muted" style="font-size: 3rem;"></i>
+                            <p class="mt-2 text-muted">沒有可顯示的資料。請選擇年份和項目。</p>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* 成功訊息 Modal *@
+<div class="modal fade" id="successModal" tabindex="-1" aria-labelledby="successModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="successModalLabel">
+                    <i class="bi bi-check-circle-fill me-2"></i>操作成功
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="text-center">
+                    <i class="bi bi-cloud-upload-fill text-success" style="font-size: 4rem;"></i>
+                    <h4 class="mt-3">儲存完成！</h4>
+                    <p class="text-muted">@successMessage</p>
+                </div>
+                <hr />
+                <div class="update-details">
+                    <p class="fw-bold text-start mb-2">更新摘要：</p>
+                    <div class="details-list">
+                        @if (successDetails.Any())
+                        {
+                            <ul>
+                                @foreach (var detail in successDetails)
+                                {
+                                    <li>@((MarkupString)detail)</li>
+                                }
+                            </ul>
+                        }
+                        else
+                        {
+                            <p class="text-muted text-center">沒有詳細的更新資訊。</p>
+                        }
+                    </div>
+                </div>
+                <div class="mt-4 text-center">
+                    <small class="text-muted">共更新了 @updatedRecordsCount 筆記錄</small>
+                </div>
+            </div>
+            <div class="modal-footer justify-content-center border-0">
+                <button type="button" class="btn btn-success" data-bs-dismiss="modal">
+                    <i class="bi bi-hand-thumbs-up me-2"></i>了解
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+@* 錯誤訊息 Modal *@
+<div class="modal fade" id="errorModal" tabindex="-1" aria-labelledby="errorModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="errorModalLabel">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>操作失敗
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center">
+                <i class="bi bi-x-circle text-danger" style="font-size: 3rem;"></i>
+                <h4 class="mt-3 text-danger">儲存失敗！</h4>
+                <p class="text-muted">@errorMessage</p>
+            </div>
+            <div class="modal-footer justify-content-center">
+                <button type="button" class="btn btn-danger" data-bs-dismiss="modal">確定</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* 專案資訊編輯 Modal *@
+<div class="modal fade" id="projectInfoModal" tabindex="-1" aria-labelledby="projectInfoModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="projectInfoModalLabel">
+                    <i class="bi bi-pencil-square me-2"></i>編輯專案資訊：<span class="fw-bold">@modalProjectName</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="container-fluid">
+                    <div class="row g-3">
+                        @* 專案時程區塊 *@
+                        <div class="col-md-6">
+                            <div class="card h-100">
+                                <div class="card-header">
+                                    <i class="bi bi-calendar-week me-2"></i>專案時程
+                                </div>
+                                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                                    @* 直接遍歷 currentMilestones 列表，UI 邏輯大幅簡化 *@
+                                    @if (currentMilestones.Any())
+                                    {
+                                        @foreach (var milestone in currentMilestones)
+                                        {
+                                            <div class="mb-3">
+                                                @* 直接使用物件的屬性來顯示標籤 *@
+                                                <label class="form-label">@milestone.DisplayName</label>
+                                                @* 直接綁定到物件的 Date 屬性 *@
+                                                <input type="text" class="form-control" @bind="milestone.Date" />
+                                            </div>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <p class="text-muted">正在載入 Milestone 資料或無可用項目...</p>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+
+                        @* 專案人員區塊 *@
+                        <div class="col-md-6">
+                            <div class="card h-100">
+                                <div class="card-header">
+                                    <i class="bi bi-people-fill me-2"></i>專案人員
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <input type="text" id="personDM" class="form-control" @bind="projectPersonnel.DM" placeholder="請輸入 AD Account(例如 Chain_Liu)" disabled="@(!(_userInfoService.UserRole == "DM" || _userInfoService.UserRole == "FM"))" />
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label for="personDL" class="form-label">專案主任 (DL)</label>
+                                        <input type="text" id="personDL" class="form-control" @bind="projectPersonnel.DL" placeholder="請輸入 AD Account(例如 Chain_Liu)" disabled="@(!(_userInfoService.UserRole == "DM" || _userInfoService.UserRole == "FM"))" />
+                                    </div>
+
+                                    <div>
+                                        <label for="personDE" class="form-label">專案工程師 (DE)</label>
+                                        <input type="text" id="personDE" class="form-control" @bind="projectPersonnel.DE" placeholder="請輸入 AD Account(例如 Chain_Liu)" disabled="@(!(_userInfoService.UserRole == "DM" || _userInfoService.UserRole == "FM"))" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-lg me-2"></i>取消
+                </button>
+                @* 新增儲存按鈕的載入狀態判斷 *@
+                <button type="button" class="btn btn-primary" @onclick="SaveProjectInfo" disabled="@isSavingProjectInfo">
+                    @if (isSavingProjectInfo)
+                    {
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        <span class="ms-2">儲存中...</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-save me-2"></i>
+                        <span>儲存變更</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* 右鍵操作選單 (Context Menu) *@
+@if (showContextMenu)
+{
+    <div class="context-menu" style="left: @(contextMenuX)px; top: @(contextMenuY)px;" @onclick:stopPropagation>
+        <ul class="list-unstyled mb-0">
+            @* class 和 @onclick 的判斷條件增加 canPerformCellActions *@
+            <li class="@((canUserApprove && canPerformCellActions) ? "" : "disabled")" @onclick="@(() => { if (canUserApprove && canPerformCellActions) ContextMenuAction(MenuAction.Approve); })">
+                <i class="bi bi-check-circle-fill me-2"></i> 核准
+            </li>
+            @* class 和 @onclick 的判斷條件增加 canPerformCellActions *@
+            <li class="@((canUserApprove && canPerformCellActions) ? "" : "disabled")" @onclick="@(() => { if (canUserApprove && canPerformCellActions) ContextMenuAction(MenuAction.CancelApproval); })">
+                <i class="bi bi-x-circle me-2"></i> 取消核准
+            </li>
+            <li class="menu-divider"></li>
+            @* 其他選項 (例如上傳/下載) 仍然可以使用 isCurrentUserProjectMember 來判斷 *@
+            <li class="@(isCurrentUserProjectMember ? "" : "disabled")" @onclick="OpenFileUploadModal">
+                <i class="bi bi-upload me-2"></i> 上傳/修改文件
+            </li>
+            @* class 和 @onclick 的判斷條件增加 canPerformCellActions *@
+            <li class="@(canPerformCellActions ? "" : "disabled")" @onclick="@(() => { if (canPerformCellActions) OpenFileDownloadModal(); })">
+                <i class="bi bi-download me-2"></i> 下載文件
+            </li>
+            <li class="menu-divider"></li>
+            <li @onclick="() => ContextMenuAction(MenuAction.OpenFolderPath)">
+                <i class="bi bi-clipboard me-2"></i> 開啟資料夾路徑
+            </li>
+        </ul>
+    </div>
+
+    @* 一個全螢幕的覆蓋層，用於點擊時關閉選單 *@
+    <div class="context-menu-overlay" @onclick="CloseContextMenu"></div>
+}
+
+@* 新增專案資訊 Modal *@
+<div class="modal fade" id="addProjectModal" tabindex="-1" aria-labelledby="addProjectModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title" id="addProjectModalLabel">
+                    <i class="bi bi-file-earmark-plus me-2"></i>新增專案資訊
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="container-fluid">
+                    <div class="row g-3">
+                        @* 基礎資訊區塊 *@
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <i class="bi bi-info-circle-fill me-2"></i>專案基礎資訊
+                                </div>
+                                <div class="card-body">
+                                    <div class="row g-3">
+                                        <div class="col-md-3">
+                                            <label for="newProjectYear" class="form-label">選擇年份</label>
+                                            <select id="newProjectYear" class="form-select" @bind="newProjectYear" @bind:after="OnNewProjectContextChanged">
+                                                @foreach (var year in YearList)
+                                                {
+                                                    <option value="@year">@year</option>
+                                                }
+                                            </select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label for="newProjectDepartment" class="form-label">選擇部門</label>
+                                            <select id="newProjectDepartment" class="form-select" @bind="newProjectDepartment" @bind:after="OnNewProjectContextChanged">
+                                                @foreach (var option in AllOptions)
+                                                {
+                                                    <option value="@option">@option</option>
+                                                }
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="newProjectName" class="form-label">專案名稱</label>
+                                            <input type="text" id="newProjectName" class="form-control" @bind="newProjectName" placeholder="請輸入專案代碼 (例如 CSLP_PTL)" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        @* 專案時程區塊 *@
+                        <div class="col-md-6">
+                            <div class="card h-100">
+                                <div class="card-header">
+                                    <i class="bi bi-calendar-week me-2"></i>專案時程
+                                </div>
+                                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                                    @if (newProjectMilestones.Any())
+                                    {
+                                        @foreach (var milestone in newProjectMilestones)
+                                        {
+                                            <div class="mb-3">
+                                                <label class="form-label">@milestone.DisplayName</label>
+                                                <input type="text" class="form-control" @bind="milestone.Date" placeholder="yyyy/mm/dd" />
+                                            </div>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <p class="text-muted">請先選擇年份和部門以載入時程項目。</p>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+
+                        @* 專案人員區塊 *@
+                        <div class="col-md-6">
+                            <div class="card h-100">
+                                <div class="card-header">
+                                    <i class="bi bi-people-fill me-2"></i>專案人員
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label for="newPersonDM" class="form-label">專案經理 (DM)</label>
+                                        <input type="text" id="newPersonDM" class="form-control" @bind="newProjectPersonnel.DM" placeholder="請輸入 AD Account" />
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="newPersonDL" class="form-label">專案主任 (DL)</label>
+                                        <input type="text" id="newPersonDL" class="form-control" @bind="newProjectPersonnel.DL" placeholder="請輸入 AD Account" />
+                                    </div>
+                                    <div>
+                                        <label for="newPersonDE" class="form-label">專案工程師 (DE)</label>
+                                        <input type="text" id="newPersonDE" class="form-control" @bind="newProjectPersonnel.DE" placeholder="請輸入 AD Account" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-lg me-2"></i>取消
+                </button>
+                <button type="button" class="btn btn-primary" @onclick="SaveNewProjectInfo" disabled="@isSavingNewProject">
+                    @if (isSavingNewProject)
+                    {
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        <span class="ms-2">儲存中...</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-save me-2"></i>
+                        <span>新增專案</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* 更新 OnUploadsCompleted 的事件處理器 *@
+<FileUploadModal @ref="fileUploadModal" OnUploadsCompleted="HandleUploadsCompleted" OnFileDeleted="HandleFileDeleted" /> 
+@* 增加 OnDownloadsCompleted 事件處理器 *@
+<FileDownloadModal @ref="fileDownloadModal" OnDownloadsCompleted="HandleDownloadsCompleted" />
+
+
+
+@code {
+    // 宣告一個屬性來接收從上層 MainLayout 傳來的串聯參數
+    [CascadingParameter] 
+    public MainLayout? Layout { get; set; }
+
+    // 用於追蹤專案資訊卡片是否最大化的狀態旗標
+    private bool isProjectInfoMaximized = false;
+
+    private bool isLoading = false;
+    private DataTable projectData = new DataTable();
+    private DataTable filteredData = new DataTable();
+    private DateTime sqlQueryTime = DateTime.MinValue;
+    private string searchTerm = "";
+    private string itemSearchTerm = ""; // 用於篩選 "Item" 欄位的關鍵字
+    private string sortColumn = "";
+    private bool sortAscending = true;
+    // 儲存選中的儲存格資訊
+    private string selectedCellKey = "";
+    private string selectedProjectName = "";
+    private string selectedStage = "";
+    private string selectedItem = "";
+
+    // Modal 相關變數
+    private string successMessage = "";
+    private string errorMessage = "";
+
+    // 用於控制專案資訊儲存時的載入動畫
+    private bool isSavingProjectInfo = false;
+
+    // 右鍵選單 (Context Menu) 相關變數
+    private bool showContextMenu = false; // 控制選單是否顯示
+    private double contextMenuX;          // 選單的 X 座標
+    private double contextMenuY;          // 選單的 Y 座標
+    private bool isCurrentUserProjectMember = false; // 用於判斷當前使用者是否為右鍵點擊專案的成員
+    private bool canUserApprove = false; // 用於判斷使用者是否有權限進行核准/取消核准
+    private bool canPerformCellActions = false; // 用於判斷儲存格內容是否允許特定操作 (核准/下載)
+    private FileUploadModal fileUploadModal = null!; // 對新元件的參考(Reference)
+    private FileDownloadModal fileDownloadModal = null!;
+
+    private int updatedRecordsCount = 0;
+    // 用於存放成功的詳細資訊
+    private List<string> successDetails = new List<string>();
+    // 用於追蹤已變更的專案欄位名稱集合
+    private HashSet<string> modifiedProjectColumns = new HashSet<string>();
+    // 建立一個集合，用來存放需要標示黃底的「欄位名稱」
+    private HashSet<string> yellowBackgroundColumns = new HashSet<string>();
+    // 用於儲存從SOW_{Year}資料表讀取的 Milestone 清單
+    private DataTable milestoneData = new DataTable();
+    // 改用 List<MilestoneInfo> 來管理 Modal 中的所有 Milestone 項目，結構更清晰
+    private List<MilestoneInfo> currentMilestones = new List<MilestoneInfo>();
+    // 儲存專案人員資訊的獨立物件
+    private ProjectPersonnel projectPersonnel = new ProjectPersonnel();
+
+    // 用於 "新增專案資訊" Modal 的相關變數
+    private string newProjectName = "";
+    private int newProjectYear;
+    private string? newProjectDepartment;
+    private List<MilestoneInfo> newProjectMilestones = new List<MilestoneInfo>();
+    private ProjectPersonnel newProjectPersonnel = new ProjectPersonnel();
+    private bool isSavingNewProject = false; // 控制新增 Modal 儲存按鈕的載入狀態
+    private bool isOverdueFilterActive = false; // 用於追蹤 Overdue 篩選器是否啟用
+
+    // 用於存放從 ProjectInfo 資料表讀取的，單一專案的完整詳細資訊
+    private class ProjectDetails
+    {
+        public ProjectPersonnel Personnel { get; set; } = new ProjectPersonnel();
+        public List<MilestoneInfo> Milestones { get; set; } = new List<MilestoneInfo>();
+    }
+
+    // Overdue 篩選器的點擊切換方法
+    private void ToggleOverdueFilter()
+    {
+        isOverdueFilterActive = !isOverdueFilterActive; // 切換啟用狀態
+        ApplyFilter(); // 重新套用所有篩選條件
+    }
+
+    // 用於切換卡片最大化/還原狀態的方法
+    private void ToggleProjectInfoMaximize()
+    {
+        isProjectInfoMaximized = !isProjectInfoMaximized;
+
+        // 呼叫 MainLayout 的公開方法來控制主內容區的滾動條
+        Layout?.SetContentOverflow(isProjectInfoMaximized);
+
+        // 通知 Blazor 狀態已變更，需要重新渲染 UI
+        StateHasChanged();
+    }
+
+    // 開啟下載視窗的處理方法
+    private void OpenFileDownloadModal()
+    {
+        if (string.IsNullOrEmpty(selectedProjectName) || string.IsNullOrEmpty(selectedStage) || string.IsNullOrEmpty(selectedItem))
+        {
+            // 如果沒有選擇任何儲存格，則不執行任何動作
+            return;
+        }
+
+        // 沿用 "複製資料夾路徑" 的邏輯來產生目標路徑
+        string sowPath = SelectedHwOption switch
+        {
+            "HW1" => @"\\tpea31hwdfs01\專案執行\HW1\0.SOW",
+            "HW2" => @"\\tpea31hwdfs01\專案執行\HW2\0.SOW",
+            "HW3" => @"\\tpea31hwdfs01\專案執行\HW3\0.SOW",
+            "HW4" => @"\\tpea31hwdfs01\專案執行\HW4\0.SOW",
+            "PWR1" => @"\\tpea31hwdfs01\專案執行\PWR1\01.Projects",
+            "PWR2" => @"\\tpea31hwdfs01\專案執行\PWR2\0.SOW",
+            _ => ""
+        };
+
+        if (string.IsNullOrEmpty(sowPath)) return;
+
+        string fullPath = Path.Combine(sowPath, SelectedYear.ToString(), selectedProjectName, selectedStage, selectedItem);
+
+        // 呼叫子元件的 Show 方法，並傳入完整路徑
+        _ = fileDownloadModal.Show(fullPath);
+
+        // 執行完動作後，自動關閉右鍵選單
+        CloseContextMenu();
+    }
+
+    // 建立一個字典，用來快取所有專案的詳細資訊。Key 是專案名稱 (string)，Value 是該專案的詳細資料 (ProjectDetails)
+    private Dictionary<string, ProjectDetails> allProjectDetails = new Dictionary<string, ProjectDetails>();
+
+    // 開啟上傳視窗的處理方法
+    private void OpenFileUploadModal()
+    {
+        if (string.IsNullOrEmpty(selectedProjectName) || string.IsNullOrEmpty(selectedStage) || string.IsNullOrEmpty(selectedItem))
+        {
+            // [可選] 顯示錯誤訊息，提示使用者需要先選擇一個儲存格
+            return;
+        }
+
+        // 沿用 "複製資料夾路徑" 的邏輯來產生目標路徑
+        string sowPath = SelectedHwOption switch
+        {
+            "HW1" => @"\\tpea31hwdfs01\專案執行\HW1\0.SOW",
+            "HW2" => @"\\tpea31hwdfs01\專案執行\HW2\0.SOW",
+            "HW3" => @"\\tpea31hwdfs01\專案執行\HW3\0.SOW",
+            "HW4" => @"\\tpea31hwdfs01\專案執行\HW4\0.SOW",
+            "PWR1" => @"\\tpea31hwdfs01\專案執行\PWR1\01.Projects",
+            "PWR2" => @"\\tpea31hwdfs01\專案執行\PWR2\0.SOW",
+            _ => ""
+        };
+
+        if (string.IsNullOrEmpty(sowPath)) return;
+
+        string fullPath = Path.Combine(sowPath, SelectedYear.ToString(), selectedProjectName, selectedStage, selectedItem);
+
+        // 呼叫子元件的 Show 方法，並傳入路徑
+        fileUploadModal.Show(fullPath);
+    }
+
+    // 更新 HandleUploadsCompleted 方法以接收檔案列表
+    private async Task HandleUploadsCompleted(List<string> uploadedFiles)
+    {
+        if (uploadedFiles != null && uploadedFiles.Any())
+        {
+            Console.WriteLine($"{uploadedFiles.Count} 個檔案上傳處理完畢。");
+            // [舊有邏輯] 呼叫方法來記錄上傳動作
+            await LogFileActionAsync(uploadedFiles, "Upload");
+
+            // 自動狀態更新邏輯
+            // 取得當前選定儲存格的值
+            var currentCellValue = GetCellValue(projectData, selectedStage, selectedItem, selectedProjectName);
+
+            // 如果儲存格目前是 "Non-Ready" 狀態，就自動更新為 "Ready"
+            if (string.IsNullOrWhiteSpace(currentCellValue) || currentCellValue.Contains("年") || currentCellValue.Contains("Non-Ready"))
+            {
+                var newValue = "*Ready"; // 加上星號表示此為程式自動變更
+
+                // 更新前端 DataTable 的值
+                UpdateCellValue(projectData, selectedStage, selectedItem, selectedProjectName, newValue);
+                UpdateCellValue(filteredData, selectedStage, selectedItem, selectedProjectName, newValue);
+
+                // 將變更直接寫回來源 SQL 資料表
+                await UpdateSourceTableAsync(selectedProjectName, selectedStage, selectedItem, newValue);
+
+                // 可以在此處加入 Toast 通知
+                await JSRuntime.InvokeVoidAsync("showToast", $"專案 {selectedProjectName} 的項目 {selectedItem} 因上傳檔案已自動更新為 Ready。", "info");
+
+                // 觸發 UI 刷新
+                StateHasChanged();
+            }
+        }
+    }
+    // 處理檔案刪除完成後的回呼事件
+    private async Task HandleFileDeleted(string deletedFileName)
+    {
+        if (!string.IsNullOrEmpty(deletedFileName))
+        {
+            Console.WriteLine($"檔案 '{deletedFileName}' 已被刪除。");
+            // [舊有邏輯] 呼叫紀錄方法來記錄刪除動作
+            await LogFileActionAsync(new List<string> { deletedFileName }, "Delete");
+
+            // 自動狀態更新邏輯
+            try
+            {
+                // 重新組合目標資料夾路徑，以檢查剩餘檔案
+                string sowPath = SelectedHwOption switch
+                {
+                    "HW1" => @"\\tpea31hwdfs01\專案執行\HW1\0.SOW",
+                    "HW2" => @"\\tpea31hwdfs01\專案執行\HW2\0.SOW",
+                    "HW3" => @"\\tpea31hwdfs01\專案執行\HW3\0.SOW",
+                    "HW4" => @"\\tpea31hwdfs01\專案執行\HW4\0.SOW",
+                    "PWR1" => @"\\tpea31hwdfs01\專案執行\PWR1\01.Projects",
+                    "PWR2" => @"\\tpea31hwdfs01\專案執行\PWR2\0.SOW",
+                    _ => ""
+                };
+
+                if (string.IsNullOrEmpty(sowPath) || string.IsNullOrEmpty(selectedProjectName) || string.IsNullOrEmpty(selectedStage) || string.IsNullOrEmpty(selectedItem))
+                {
+                    return; // 如果路徑或上下文資訊不完整，則不執行
+                }
+
+                string fullPath = Path.Combine(sowPath, SelectedYear.ToString(), selectedProjectName, selectedStage, selectedItem);
+
+                // 檢查資料夾是否存在以及是否為空
+                if (Directory.Exists(fullPath) && Directory.GetFiles(fullPath).Length == 0)
+                {
+                    // 如果資料夾變空，則執行狀態更新
+                    var currentCellValue = GetCellValue(projectData, selectedStage, selectedItem, selectedProjectName);
+
+                    // 只有在狀態不是 "Non-Ready" 時才更新，避免重複操作
+                    if (currentCellValue != null && !currentCellValue.Contains("Non-Ready"))
+                    {
+                        var newValue = "*Non-Ready"; // 標記為自動變更
+
+                        // 更新前端 DataTable
+                        UpdateCellValue(projectData, selectedStage, selectedItem, selectedProjectName, newValue);
+                        UpdateCellValue(filteredData, selectedStage, selectedItem, selectedProjectName, newValue);
+
+                        // 將變更同步回 SQL 資料庫
+                        await UpdateSourceTableAsync(selectedProjectName, selectedStage, selectedItem, newValue);
+
+                        // 顯示 Toast 通知
+                        await JSRuntime.InvokeVoidAsync("showToast", $"專案 {selectedProjectName} 的項目 {selectedItem} 因檔案已清空，自動更新為 Non-Ready。", "info");
+
+                        // 觸發 UI 刷新
+                        StateHasChanged();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // 錯誤處理，避免因檔案系統權限等問題導致程式崩潰
+                Console.WriteLine($"檢查檔案目錄或更新狀態時發生錯誤: {ex.Message}");
+                await JSRuntime.InvokeVoidAsync("showToast", "檢查檔案狀態時發生錯誤，請聯絡管理員。", "danger");
+            }
+        }
+    }
+    // 處理下載完成後的回呼事件
+    private async Task HandleDownloadsCompleted(List<string> downloadedFiles)
+    {
+        if (downloadedFiles != null && downloadedFiles.Any())
+        {
+            Console.WriteLine($"{downloadedFiles.Count} 個檔案下載請求已發送。");
+            // 呼叫新的方法來記錄下載動作
+            await LogFileActionAsync(downloadedFiles, "Download");
+        }
+    }
+
+    // 記錄檔案操作 (上傳/下載) 至資料庫
+    private async Task LogFileActionAsync(List<string> fileNames, string actionType)
+    {
+        // 檢查是否有必要的資訊可供記錄
+        if (string.IsNullOrEmpty(selectedProjectName) || string.IsNullOrEmpty(selectedStage) || string.IsNullOrEmpty(selectedItem))
+        {
+            Console.WriteLine("無法記錄檔案操作：缺少專案、階段或項目的上下文資訊。");
+            return;
+        }
+
+        // 取得連線字串
+        string connectionString = _configuration.GetConnectionString("WriteConnection_A31_HWD");
+        var actionTime = DateTime.Now;
+
+        using (var conn = new SqlConnection(connectionString))
+        {
+            await conn.OpenAsync();
+            // 準備 INSERT 陳述式
+            var commandText = @"
+                INSERT INTO A31_HWD_Portal_Dashboard_FileAction_Record
+                (Division, Department, UserName, UserRole, ProjectYear, ProjectCode, Stage, Item, ActionType, FileName, ActionTime)
+                VALUES
+                (@Division, @Department, @UserName, @UserRole, @ProjectYear, @ProjectCode, @Stage, @Item, @ActionType, @FileName, @ActionTime)";
+
+            // 為每個檔案執行一次 INSERT
+            foreach (var fileName in fileNames)
+            {
+                using (var cmd = new SqlCommand(commandText, conn))
+                {
+                    cmd.Parameters.AddWithValue("@Division", _userInfoService.UserDivision ?? "A31_HWD");
+                    cmd.Parameters.AddWithValue("@Department", SelectedHwOption ?? "N/A");
+                    cmd.Parameters.AddWithValue("@UserName", _userInfoService.UserName ?? "N/A");
+                    cmd.Parameters.AddWithValue("@UserRole", _userInfoService.UserRole ?? "N/A");
+                    cmd.Parameters.AddWithValue("@ProjectYear", SelectedYear);
+                    cmd.Parameters.AddWithValue("@ProjectCode", selectedProjectName);
+                    cmd.Parameters.AddWithValue("@Stage", selectedStage);
+                    cmd.Parameters.AddWithValue("@Item", selectedItem);
+                    cmd.Parameters.AddWithValue("@ActionType", actionType);
+                    cmd.Parameters.AddWithValue("@FileName", fileName);
+                    cmd.Parameters.AddWithValue("@ActionTime", actionTime);
+
+                    try
+                    {
+                        await cmd.ExecuteNonQueryAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        // 記錄錯誤，但不中斷流程，以確保其他檔案的記錄能繼續
+                        Console.WriteLine($"記錄檔案操作 {actionType} for file {fileName} 失敗: {ex.Message}");
+                    }
+                }
+            }
+        }
+        Console.WriteLine($"已成功記錄 {fileNames.Count} 筆 '{actionType}' 操作至資料庫。");
+    }
+
+    // 專案人員的資料模型
+    private class ProjectPersonnel
+    {
+        public string? DM { get; set; }
+        public string? DL { get; set; }
+        public string? DE { get; set; }
+    }
+
+    // 檢查當前登入使用者是否為指定專案的成員 (DM, DL, DE)
+    private bool CheckIfUserIsProjectMember(string projectName)
+    {
+        // 如果使用者資訊服務未初始化或沒有使用者名稱，直接返回 false
+        if (_userInfoService == null || !_userInfoService.IsInitialized || string.IsNullOrEmpty(_userInfoService.UserName))
+        {
+            return false;
+        }
+
+        // 如果專案名稱為空或在我們的快取字典中找不到該專案的詳細資訊，也返回 false
+        if (string.IsNullOrEmpty(projectName) || !allProjectDetails.TryGetValue(projectName, out var details))
+        {
+            return false;
+        }
+
+        // 取得當前使用者的名稱 (並進行清理，以匹配儲存的資料格式)
+        string currentUserName = CleanMemberString(_userInfoService.UserName);
+
+        // 將專案的 DM, DL, DE 成員名單合併成一個列表，並對每個名字進行清理
+        var projectMembers = new List<string>();
+        if (!string.IsNullOrEmpty(details.Personnel.DM))
+        {
+            projectMembers.AddRange(details.Personnel.DM.Split(';').Select(s => CleanMemberString(s)));
+        }
+        if (!string.IsNullOrEmpty(details.Personnel.DL))
+        {
+            projectMembers.AddRange(details.Personnel.DL.Split(';').Select(s => CleanMemberString(s)));
+        }
+        if (!string.IsNullOrEmpty(details.Personnel.DE))
+        {
+            projectMembers.AddRange(details.Personnel.DE.Split(';').Select(s => CleanMemberString(s)));
+        }
+
+        // 判斷當前使用者是否在專案成員列表中 (忽略大小寫)
+        return projectMembers.Contains(currentUserName, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// 取得當前使用者在指定專案中的特定角色 (DM, DL, DE)。
+    /// </summary>
+    /// <param name="projectName">要查詢的專案名稱。</param>
+    /// <returns>回傳專案角色 (例如 "DM")，如果找不到，則回傳使用者的全域角色作為備用。</returns>
+    private string GetUserRoleForProject(string projectName)
+    {
+        // 預設回傳空白，以防在專案中找不到對應角色
+        string fallbackRole = "";
+
+        // 確保使用者和專案的上下文資訊有效
+        if (string.IsNullOrEmpty(projectName) || !_userInfoService.IsInitialized || string.IsNullOrEmpty(_userInfoService.UserName))
+        {
+            return fallbackRole;
+        }
+
+        // 嘗試從快取的專案詳細資訊中尋找
+        if (!allProjectDetails.TryGetValue(projectName, out var details))
+        {
+            // 如果快取中沒有此專案的資訊，也回傳全域角色
+            return fallbackRole;
+        }
+
+        // 取得清理過的當前使用者名稱，以利比對
+        string currentUserName = CleanMemberString(_userInfoService.UserName);
+        var personnel = details.Personnel;
+
+        // 依序檢查 DM, DL, DE 欄位是否包含當前使用者
+        // 使用 Split(';') 是為了處理一個角色有多個負責人的情況
+        if (!string.IsNullOrEmpty(personnel.DM) && personnel.DM.Split(';').Select(s => CleanMemberString(s)).Contains(currentUserName, StringComparer.OrdinalIgnoreCase))
+        {
+            return "DM";
+        }
+        if (!string.IsNullOrEmpty(personnel.DL) && personnel.DL.Split(';').Select(s => CleanMemberString(s)).Contains(currentUserName, StringComparer.OrdinalIgnoreCase))
+        {
+            return "DL";
+        }
+        if (!string.IsNullOrEmpty(personnel.DE) && personnel.DE.Split(';').Select(s => CleanMemberString(s)).Contains(currentUserName, StringComparer.OrdinalIgnoreCase))
+        {
+            return "DE";
+        }
+
+        // 如果在專案的 DM/DL/DE 中都找不到，最後才回傳使用者的全域角色
+        return fallbackRole;
+    }
+    // 定義選單操作的列舉，方便管理
+    private enum MenuAction
+    {
+        Approve,
+        CancelApproval,
+        OpenFolderPath
+    }
+    // 改為自動屬性，邏輯移至 OnYearChanged 事件處理常式
+    private int SelectedYear { get; set; }
+
+    // 改為自動屬性，邏輯移至 OnDepartmentChanged 事件處理常式
+    private string? SelectedHwOption { get; set; }
+
+    // 年份選擇變更時的事件處理常式
+    private async Task OnYearChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int selectedYear))
+        {
+            SelectedYear = selectedYear;
+            await LoadProjectData();
+            await LoadAllProjectDetailsAsync();
+            await LoadMilestoneData();
+        }
+    }
+
+    // 部門選擇變更時的事件處理常式
+    private async Task OnDepartmentChanged(ChangeEventArgs e)
+    {
+        SelectedHwOption = e.Value?.ToString();
+        await LoadProjectData();
+        await LoadAllProjectDetailsAsync();
+    }
+
+    /// <summary>
+    /// 處理右鍵點擊事件，顯示操作選單
+    /// </summary>
+    private void ShowContextMenu(MouseEventArgs e, DataRow row, DataColumn col)
+    {
+        // 如果點擊的是 Stage 或 Item 欄，則不顯示選單
+        if (col.ColumnName == "Stage" || col.ColumnName == "Item") return;
+        // 產生當前右鍵點擊儲存格的唯一鍵值
+        string stage = row["Stage"]?.ToString() ?? "";
+        string item = row["Item"]?.ToString() ?? "";
+        string projectName = col.ColumnName;
+        string currentCellKey = $"{stage}_{item}_{projectName}";
+
+        if (selectedCellKey != currentCellKey)
+        {
+            SelectCell(row, col);
+        }
+
+        // 判斷儲存格內容來決定是否啟用特定選單選項
+        var currentCellValue = GetCellValue(filteredData, selectedStage, selectedItem, selectedProjectName) ?? "";
+        // 只有當儲存格內容包含 Ready, Checked, 或 Approval 時才為 true
+        canPerformCellActions = (currentCellValue.Contains("Ready") && !currentCellValue.Contains("Non-Ready")) ||
+                        currentCellValue.Contains("Checked") ||
+                        currentCellValue.Contains("Approval");
+
+        // 檢查當前使用者是否為該專案的成員 (DM, DL, DE)
+        isCurrentUserProjectMember = CheckIfUserIsProjectMember(selectedProjectName);
+        // 增加更嚴格的權限判斷
+        // 取得使用者在該專案的角色
+        string userProjectRole = GetUserRoleForProject(selectedProjectName);
+        // 只有當角色是 DM, DL, 或 FM 時，才設定為 true
+        canUserApprove = (userProjectRole == "DM" || userProjectRole == "DL" || userProjectRole == "FM");
+        // 設定選單要顯示的座標
+        contextMenuX = e.ClientX;
+        contextMenuY = e.ClientY;
+        // 顯示選單
+        showContextMenu = true;
+        // 通知 Blazor 進行畫面刷新
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// 關閉右鍵操作選單
+    /// </summary>
+    private void CloseContextMenu()
+    {
+        showContextMenu = false;
+        StateHasChanged();
+    }
+
+    private async Task ContextMenuAction(MenuAction action)
+    {
+        if (string.IsNullOrEmpty(selectedCellKey))
+        {
+            CloseContextMenu();
+            return;
+        }
+
+        switch (action)
+        {
+            case MenuAction.Approve:
+                // 改為 await 呼叫
+                await ApproveProject();
+                break;
+
+            case MenuAction.CancelApproval:
+                // 改為 await 呼叫
+                await CancelProjectApproval();
+                break;
+
+            case MenuAction.OpenFolderPath:
+                await OpenProjectFolderPath();
+                break;
+        }
+        CloseContextMenu();
+    }
+
+    private List<int> YearList = new List<int>();
+    // 將所有項目選項合併為一個列表
+    private List<string> AllOptions = new List<string>(); // .....
+    private List<string> HardwareOptions = new List<string> { "HW1", "HW2", "HW3", "HW4" };
+    private List<string> PowerOptions = new List<string> { "PWR1", "PWR2" };
+
+    protected override async Task OnInitializedAsync()
+    {
+        // 在頁面初始化時，透過 Layout 物件呼叫其公開方法來設定標題
+        Layout?.SetPageTitle("儀表板 (Dashboard)");
+        int currentYear = DateTime.Now.Year;
+        currentYear = 2025; // 根據原始碼，固定為 2025
+
+        int startYear = currentYear + 1;
+        int endYear = currentYear - 2;
+        for (int year = startYear; year >= endYear; year--)
+        {
+            YearList.Add(year);
+        }
+
+        // 將 HardwareOptions 和 PowerOptions 合併到 AllOptions
+        AllOptions.AddRange(HardwareOptions);
+        // .....
+        AllOptions.AddRange(PowerOptions);
+        // .....
+        // 預設選取為使用者部門名稱，如果找不到則設為第一個選項
+        // 將 _selectedHwOption 改為 SelectedHwOption
+        SelectedHwOption = AllOptions.FirstOrDefault(o => o == _userInfoService.UserDepartment) ?? AllOptions.FirstOrDefault();
+        // 將 _selectedYear 改為 SelectedYear
+        SelectedYear = currentYear;
+        await LoadProjectData();
+        await LoadMilestoneData();
+        // 在所有基礎資料載入後，批次載入專案資訊
+        await LoadAllProjectDetailsAsync();
+    }
+
+    // 載入 Milestone 資料時，直接初始化 currentMilestones 列表
+    private async Task LoadMilestoneData()
+    {
+        string readsheet = $"ProjectDashboard_A31_HWD_電源部_SOW_{SelectedYear}";
+        milestoneData = await Task.Run(() => ReadSQLdata(readsheet));
+
+        // 這一步實現了您的核心需求：
+        // 在讀取 SOW 表後，立即建立好 Milestone 的清單結構
+        currentMilestones.Clear();
+        if (milestoneData != null)
+        {
+            foreach (DataRow row in milestoneData.Rows)
+            {
+                var displayName = row["D-Date"]?.ToString();
+                var itemKey = row["Item"]?.ToString();
+
+                // 只有當 D-Date 和 Item 都有值時，才將其視為一個有效的 Milestone
+                if (!string.IsNullOrWhiteSpace(displayName) && !string.IsNullOrWhiteSpace(itemKey))
+                {
+                    currentMilestones.Add(new MilestoneInfo
+                    {
+                        ItemKey = itemKey,
+                        DisplayName = displayName
+                        // Date 此時為 null
+                    });
+                }
+            }
+        }
+        StateHasChanged();
+    }
+
+    // LoadProjectData 方法，載入新資料時清除選擇
+    private async Task LoadProjectData()
+    {
+        // 重新載入資料時，一併重設 Overdue 篩選器的啟用狀態
+        isOverdueFilterActive = false;
+        // 載入新資料前，清空變更追蹤
+        modifiedProjectColumns.Clear();
+        // 清除之前的選擇
+        ClearSelection();
+        // ... 原有的 LoadProjectData 邏輯保持不變 ...
+        if (string.IsNullOrEmpty(SelectedHwOption) || SelectedYear == 0) return;
+        isLoading = true;
+        StateHasChanged();
+        var data = await Task.Run(() =>
+        {
+            string tableName = $"ProjectDashboard_{SelectedHwOption}_{SelectedYear}";
+            return ReadSQLdata(tableName);
+        });
+        if (data != null && data.Columns.Count > 0) data.Columns.RemoveAt(0);
+        projectData = data;
+        yellowBackgroundColumns.Clear();
+        if (projectData != null)
+        {
+            var originalColumnNames = projectData.Columns.Cast<DataColumn>().Select(c => c.ColumnName).ToList();
+            foreach (var originalName in originalColumnNames)
+            {
+                if (originalName.Contains("#"))
+                {
+                    var newName = originalName.Replace("#", "");
+                    yellowBackgroundColumns.Add(newName);
+                    projectData.Columns[originalName].ColumnName = newName;
+                }
+            }
+        }
+        filteredData = projectData.Copy();
+        searchTerm = "";
+        sortColumn = "";
+        sortAscending = true;
+        isLoading = false;
+        StateHasChanged();
+    }
+
+    // 此方法已更新，以包含獲取資料表最後更新時間的邏輯
+    private DataTable ReadSQLdata(string readsheet)
+    {
+        // 您的連接字串，確保 TrustServerCertificate=True 存在以符合 Blazor Server 環境需求
+        string connectionString = _configuration.GetConnectionString("ReadConnection_A31_HWD_PWR");
+        DataTable dataTable = new DataTable();
+        using (SqlConnection cnn = new SqlConnection(connectionString))
+        {
+            try
+            {
+                cnn.Open();
+                // 獲取資料表最後修改時間的 SQL 查詢
+                string timeQuery = @"
+                    SELECT MAX(last_user_update) AS last_modified_time
+                    FROM sys.dm_db_index_usage_stats
+                    WHERE database_id = DB_ID()
+                    AND object_id = OBJECT_ID(@tableName)";
+                // 執行查詢以獲取時間
+                using (SqlCommand timeCmd = new SqlCommand(timeQuery, cnn))
+                {
+                    timeCmd.Parameters.AddWithValue("@tableName", readsheet);
+                    object result = timeCmd.ExecuteScalar();
+
+                    // 更新 sqlQueryTime 的值
+                    if (result != null && result != DBNull.Value)
+                    {
+                        sqlQueryTime = (DateTime)result;
+                        // 將查詢到的時間指派給 sqlQueryTime
+                    }
+                    else
+                    {
+                        // 如果在 sys.dm_db_index_usage_stats 中查不到時間 (例如，剛建立的資料表還沒有更新紀錄)，則使用當前時間作為備用
+                        sqlQueryTime = DateTime.Now;
+                    }
+                }
+
+                // 原有的讀取資料表主要內容的邏輯
+                string query = $"SELECT * FROM {readsheet}";
+                using (SqlCommand cmd = new SqlCommand(query, cnn))
+                using (SqlDataAdapter adapter = new SqlDataAdapter(cmd))
+                {
+                    adapter.Fill(dataTable);
+                }
+            }
+            catch (SqlException ex)
+            {
+                Console.WriteLine($"SQL Error reading {readsheet}: {ex.Message}");
+                sqlQueryTime = DateTime.MinValue; // 發生錯誤時，重設時間，避免顯示舊的或錯誤的時間戳記
+                return new DataTable();
+            }
+        }
+        return dataTable;
+    }
+
+
+    // 修改原有的 FilterData 方法，使其專門處理專案名稱的篩選
+    private void FilterProjectData(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? "";
+        ApplyFilter();
+    }
+
+    // 新增一個方法來處理 "Item" 欄位的篩選
+    private void FilterItemData(ChangeEventArgs e)
+    {
+        itemSearchTerm = e.Value?.ToString() ?? "";
+        ApplyFilter();
+    }
+
+    // 大幅修改 ApplyFilter 方法，使其在啟用 Overdue 篩選時，同時過濾掉沒有過期項目的資料列與資料欄
+    private void ApplyFilter()
+    {
+        if (projectData == null || projectData.Columns.Count == 0) return;
+
+        // --- 步驟 1: 篩選資料列 (Row Filtering) ---
+
+        var query = projectData.AsEnumerable();
+
+        // 根據 "Item" 搜尋框篩選
+        if (!string.IsNullOrWhiteSpace(itemSearchTerm))
+        {
+            query = query.Where(row => row.Field<string>("Item")?.Contains(itemSearchTerm, StringComparison.OrdinalIgnoreCase) ?? false);
+        }
+
+        // 如果啟用 Overdue 篩選，則只保留至少包含一個 "!" 的資料列
+        if (isOverdueFilterActive)
+        {
+            var projectColumnsForRowFilter = projectData.Columns.Cast<DataColumn>()
+                .Where(c => c.ColumnName != "Stage" && c.ColumnName != "Item")
+                .Select(c => c.ColumnName)
+                .ToList();
+
+            query = query.Where(row =>
+                projectColumnsForRowFilter.Any(colName => (row[colName]?.ToString() ?? "").Contains("!"))
+            );
+        }
+
+        // 將篩選後的資料列存入一個暫存 DataTable
+        DataTable rowFilteredTable;
+        if (query.Any())
+        {
+            rowFilteredTable = query.CopyToDataTable();
+        }
+        else
+        {
+            rowFilteredTable = projectData.Clone();
+        }
+
+
+        // --- 步驟 2: 篩選資料欄 (Column Filtering) ---
+
+        // 取得所有專案欄位的初始列表
+        var columnsToShow = projectData.Columns.Cast<DataColumn>()
+            .Where(c => c.ColumnName != "Stage" && c.ColumnName != "Item")
+            .Select(c => c.ColumnName)
+            .ToList();
+
+        // 如果啟用 Overdue 篩選，則只保留至少包含一個 "!" 的專案欄位
+        // 這裡我們檢查整個 projectData，以確保即使過期的項目被 itemSearchTerm 過濾掉，其對應的專案欄位依然能被正確判斷
+        if (isOverdueFilterActive)
+        {
+            columnsToShow = columnsToShow.Where(colName =>
+                projectData.AsEnumerable().Any(row => (row[colName]?.ToString() ?? "").Contains("!"))
+            ).ToList();
+        }
+
+        // 根據 "專案名稱" 搜尋框，從已篩選的欄位列表中再次篩選
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            columnsToShow = columnsToShow
+                .Where(c => c.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+
+        // --- 步驟 3: 產生最終結果 ---
+
+        // 組合最終要顯示的欄位列表 (固定欄位 + 篩選後的專案欄位)
+        var finalColumns = new List<string>();
+        if (projectData.Columns.Contains("Stage")) finalColumns.Add("Stage");
+        if (projectData.Columns.Contains("Item")) finalColumns.Add("Item");
+        finalColumns.AddRange(columnsToShow);
+
+        // 使用 DataView 從已篩選的資料列中，選取最終要顯示的資料欄，來建立最終的 DataTable
+        DataView finalView = new DataView(rowFilteredTable);
+        filteredData = finalView.ToTable("FilteredTable", false, finalColumns.ToArray());
+
+
+        // --- 步驟 4: 套用排序 ---
+        if (!string.IsNullOrEmpty(sortColumn) && filteredData.Columns.Contains(sortColumn))
+        {
+            ApplySort();
+        }
+
+        StateHasChanged();
+    }
+
+    // 修改原有的 ClearSearch 方法，使其專門清除專案篩選
+    private void ClearProjectSearch()
+    {
+        searchTerm = "";
+        ApplyFilter();
+    }
+    // 用於清除 Item 篩選條件的方法
+    private void ClearItemSearch()
+    {
+        itemSearchTerm = "";
+        ApplyFilter();
+    }
+
+    private void SortData(string columnName)
+    {
+
+        if (sortColumn == columnName) { sortAscending = !sortAscending; }
+        else { sortColumn = columnName; sortAscending = true; }
+        ApplySort();
+        StateHasChanged();
+    }
+
+    private void ApplySort()
+    {
+
+        if (filteredData == null || filteredData.Rows.Count == 0 || string.IsNullOrEmpty(sortColumn)) return;
+        if (!filteredData.Columns.Contains(sortColumn)) return;
+        try
+        {
+            DataView view = filteredData.DefaultView;
+            view.Sort = $"{sortColumn} {(sortAscending ? "ASC" : "DESC")}";
+            filteredData = view.ToTable();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"排序錯誤: {ex.Message}");
+        }
+    }
+
+    // 調整整個方法的邏輯順序以相容新舊資料
+    private string GetCellStyle(string cellValue, string columnName)
+    {
+        // 基礎的防呆判斷
+        if (columnName == "Stage" || columnName == "Item")
+        {
+            return "";
+        }
+        if (string.IsNullOrWhiteSpace(cellValue)) return "";
+
+        // 步驟 1: 優先處理舊資料，直接判斷是否包含 ! 或 #
+        // 這樣可以確保含有符號的舊資料能被正確上色
+        if (cellValue.Contains("!"))
+        {
+            return "background-color: #ffcccc; border-left: 4px solid #dc3545; font-weight: bold;";
+        }
+        if (cellValue.Contains("#"))
+        {
+            return "background-color: #FFFF00; border-left: 4px solid #FFD700;";
+        }
+
+        // 步驟 2: 如果沒有符號，再嘗試將儲存格內容解析為日期 (處理新資料)
+        if (DateTime.TryParse(cellValue, out DateTime parsedDate))
+        {
+            var today = DateTime.Today;
+
+            // 判斷是否已過期 (日期早於今天)
+            if (parsedDate < today)
+            {
+                return "background-color: #ffcccc; border-left: 4px solid #dc3545; font-weight: bold;";
+            }
+            // 判斷是否 7 日內到期 (日期在今天與未來 7 天之間)
+            if (parsedDate >= today && (parsedDate - today).TotalDays <= 7)
+            {
+                return "background-color: #FFFF00; border-left: 4px solid #FFD700;";
+            }
+
+            // 如果是日期但不是特殊狀態，則回傳預設樣式
+            return "";
+        }
+
+        // 步驟 3: 如果以上都不是，則沿用 switch 邏輯處理 "Ready" 等文字狀態
+        return cellValue switch
+        {
+            var val when val.StartsWith("*") => "background-color: #e8d5ff; border-left: 4px solid #8b5cf6;",
+            var val when val.Equals("Ready", StringComparison.OrdinalIgnoreCase) => "background-color: #fef3c7; border-left: 4px solid #f59e0b;",
+            var val when val.Contains("Checked") => "background-color: #cffafe; border-left: 4px solid #06b6d4;",
+            var val when val.Contains("Approval") => "background-color: #d4edda; border-left: 4px solid #28a745;",
+            var val when val.Equals("N/A", StringComparison.OrdinalIgnoreCase) => "background-color: #64748b; color: white; text-align: center; font-weight: 500;",
+            _ => ""
+        };
+    }
+
+    private MarkupString GetStatusIndicator(string cellValue)
+    {
+
+        if (string.IsNullOrEmpty(cellValue)) return new MarkupString("");
+        var indicator = cellValue switch
+        {
+            var val when val.Contains("!") => "<span class='status-indicator status-error'></span>",
+            var val when val.Contains("#") => "<span class='status-indicator status-warning'></span>",
+            var val when val.Equals("Ready", StringComparison.OrdinalIgnoreCase) => "<span class='status-indicator status-info'></span>",
+            var val when val.Contains("Checked") || val.Contains("Approval") => "<span class='status-indicator status-ready'></span>",
+            _ => ""
+        };
+        return new MarkupString(indicator);
+    }
+
+    private string CleanCellValue(string cellValue)
+    {
+        if (string.IsNullOrEmpty(cellValue)) return "";
+        if (cellValue.Contains("2999")) return "Non-Ready";
+        return cellValue.Replace("#", "").Replace("!", "");
+    }
+    
+    private async Task OpenProjectFolderPath()
+    {
+        // 檢查是否已選擇有效的儲存格，邏輯與上傳/下載功能對齊
+        if (string.IsNullOrEmpty(selectedProjectName) || string.IsNullOrEmpty(selectedStage) || string.IsNullOrEmpty(selectedItem))
+        {
+            // 如果儲存格無效，例如點擊到 Stage 的彙總列，則提示使用者
+            if (string.IsNullOrEmpty(selectedItem))
+            {
+                await JSRuntime.InvokeVoidAsync("showToast", "此為彙總列，無法開啟路徑。", "warning");
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("showToast", "無法開啟路徑：請先選擇一個有效的儲存格。", "warning");
+            }
+            return;
+        }
+
+        // 直接使用 selectedProjectName, selectedStage, selectedItem 變數來組合路徑
+        string sowPath = SelectedHwOption switch
+        {
+            "HW1" => @"\\tpea31hwdfs01\專案執行\HW1\0.SOW",
+            "HW2" => @"\\tpea31hwdfs01\專案執行\HW2\0.SOW",
+            "HW3" => @"\\tpea31hwdfs01\專案執行\HW3\0.SOW",
+            "HW4" => @"\\tpea31hwdfs01\專案執行\HW4\0.SOW",
+            "PWR1" => @"\\tpea31hwdfs01\專案執行\PWR1\01.Projects",
+            "PWR2" => @"\\tpea31hwdfs01\專案執行\PWR2\0.SOW",
+            _ => ""
+        };
+        if (string.IsNullOrEmpty(sowPath))
+        {
+            await JSRuntime.InvokeVoidAsync("showToast", $"無法產生路徑：未知的選項 '{SelectedHwOption}'", "danger");
+            return;
+        }
+
+        string fullPath = Path.Combine(sowPath, SelectedYear.ToString(), selectedProjectName, selectedStage, selectedItem);
+
+        // [修改] 使用檔案總管開啟資料夾(若資料夾不在, 則先建立資料夾)
+        try
+        {
+            // 檢查資料夾是否存在，若不存在則會自動建立所有層級的資料夾
+            Directory.CreateDirectory(fullPath);
+
+            // 使用 Process.Start 呼叫檔案總管開啟指定的路徑
+            // 這功能僅適用於 MAUI Blazor 等桌面應用程式環境
+            Process.Start("explorer.exe", fullPath);
+
+            // 透過 JS Interop 顯示成功通知
+            await JSRuntime.InvokeVoidAsync("showToast", "資料夾已成功開啟。", "success");
+        }
+        catch (Exception ex)
+        {
+            // 如果發生錯誤 (例如，路徑無效、權限不足)，則記錄錯誤並通知使用者
+            Console.WriteLine($"開啟資料夾失敗: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("showToast", $"開啟資料夾失敗: {ex.Message}", "danger");
+        }
+    }
+
+
+    // 處理儲存格點擊事件
+    private void SelectCell(DataRow row, DataColumn column)
+    {
+        if (row == null || column == null) return;
+        // 如果點擊的是 Stage 或 Item 欄位，則不進行選擇
+        if (column.ColumnName == "Stage" || column.ColumnName == "Item") return;
+        string stage = row["Stage"]?.ToString() ?? "";
+        string item = row["Item"]?.ToString() ?? "";
+        string projectName = column.ColumnName;
+        // 建立唯一的儲存格鍵值
+        string cellKey = $"{stage}_{item}_{projectName}";
+        // 如果點擊的是同一個儲存格，則取消選擇
+        if (selectedCellKey == cellKey)
+        {
+            selectedCellKey = "";
+            selectedProjectName = "";
+            selectedStage = "";
+            selectedItem = "";
+        }
+        else
+        {
+            // 否則選擇新的儲存格
+            selectedCellKey = cellKey;
+            selectedProjectName = projectName;
+            selectedStage = stage;
+            selectedItem = item;
+        }
+
+        StateHasChanged();
+        // [可選] 在控制台輸出選中資訊，方便偵錯
+        if (!string.IsNullOrEmpty(selectedCellKey))
+        {
+            Console.WriteLine($"已選中儲存格 - 專案: {selectedProjectName}, Stage: {selectedStage}, Item: {selectedItem}");
+        }
+        else
+        {
+            Console.WriteLine("已取消選擇儲存格");
+        }
+    }
+
+    // 檢查儲存格是否被選中
+    private bool IsCellSelected(DataRow row, DataColumn column)
+    {
+        if (string.IsNullOrEmpty(selectedCellKey) || row == null || column == null) return false;
+        string stage = row["Stage"]?.ToString() ?? "";
+        string item = row["Item"]?.ToString() ?? "";
+        string projectName = column.ColumnName;
+        string cellKey = $"{stage}_{item}_{projectName}";
+        return selectedCellKey == cellKey;
+    }
+
+    // 清除選擇
+    private void ClearSelection()
+    {
+        selectedCellKey = "";
+        selectedProjectName = "";
+        selectedStage = "";
+        selectedItem = "";
+        StateHasChanged();
+    }
+
+    // 專門處理「核准」操作的邏輯 (正向流程)
+    private async Task ApproveProject()
+    {
+        if (!string.IsNullOrEmpty(selectedCellKey) && _userInfoService != null && _userInfoService.IsInitialized)
+        {
+            // 先取得使用者在此專案中的角色
+            string userProjectRole = GetUserRoleForProject(selectedProjectName);
+
+            string currentCellValue = GetCellValue(projectData, selectedStage, selectedItem, selectedProjectName) ?? "";
+            string newValue = currentCellValue;
+
+            // 使用 userProjectRole 進行判斷
+            if (userProjectRole == "DL")
+            {
+                if (currentCellValue.Contains("Ready") && !currentCellValue.Contains("Non-Ready"))
+                {
+                    newValue = "*Checked";
+                }
+            }
+            // 使用 userProjectRole 進行判斷
+            else if (userProjectRole == "DM" || userProjectRole == "FM")
+            {
+                if ((currentCellValue.Contains("Ready") && !currentCellValue.Contains("Non-Ready")) || currentCellValue.Contains("Checked"))
+                {
+                    newValue = "*Approval";
+                }
+            }
+
+            if (newValue != currentCellValue)
+            {
+                UpdateCellValue(projectData, selectedStage, selectedItem, selectedProjectName, newValue);
+                UpdateCellValue(filteredData, selectedStage, selectedItem, selectedProjectName, newValue);
+                if (!modifiedProjectColumns.Contains(selectedProjectName))
+                {
+                    modifiedProjectColumns.Add(selectedProjectName);
+                }
+
+                await LogReviewActionAsync("checked");
+
+                // 將變更直接寫回來源 SQL 資料表
+                await UpdateSourceTableAsync(selectedProjectName, selectedStage, selectedItem, newValue);
+
+                StateHasChanged();
+            }
+        }
+        else
+        {
+            if (string.IsNullOrEmpty(selectedCellKey))
+            {
+                Console.WriteLine("錯誤：請先在表格中選擇一個儲存格。");
+            }
+            else
+            {
+                Console.WriteLine("錯誤：使用者資訊尚未初始化，無法執行操作。");
+            }
+        }
+    }
+
+    // 專門處理「取消核准」操作的邏輯 (逆向流程)
+    private async Task CancelProjectApproval()
+    {
+        if (!string.IsNullOrEmpty(selectedCellKey) && _userInfoService != null && _userInfoService.IsInitialized)
+        {
+            // 先取得使用者在此專案中的角色
+            string userProjectRole = GetUserRoleForProject(selectedProjectName);
+
+            string currentCellValue = GetCellValue(projectData, selectedStage, selectedItem, selectedProjectName) ?? "";
+            string newValue = currentCellValue;
+
+            // 使用 userProjectRole 進行判斷
+            if (userProjectRole == "DL")
+            {
+                if (currentCellValue.Contains("Checked"))
+                {
+                    newValue = "*Ready";
+                }
+            }
+            // 使用 userProjectRole 進行判斷
+            else if (userProjectRole == "DM" || userProjectRole == "FM")
+            {
+                if (currentCellValue.Contains("Approval"))
+                {
+                    newValue = "*Ready";
+                }
+            }
+
+            if (newValue != currentCellValue)
+            {
+                UpdateCellValue(projectData, selectedStage, selectedItem, selectedProjectName, newValue);
+                UpdateCellValue(filteredData, selectedStage, selectedItem, selectedProjectName, newValue);
+                if (!modifiedProjectColumns.Contains(selectedProjectName))
+                {
+                    modifiedProjectColumns.Add(selectedProjectName);
+                }
+
+                await LogReviewActionAsync("unchecked");
+
+                // 將變更直接寫回來源 SQL 資料表
+                await UpdateSourceTableAsync(selectedProjectName, selectedStage, selectedItem, newValue);
+
+                StateHasChanged();
+            }
+        }
+        else
+        {
+            if (string.IsNullOrEmpty(selectedCellKey))
+            {
+                Console.WriteLine("錯誤：請先在表格中選擇一個儲存格。");
+            }
+            else
+            {
+                Console.WriteLine("錯誤：使用者資訊尚未初始化，無法執行操作。");
+            }
+        }
+    }
+
+    // 輔助方法：用於取得指定儲存格的值
+    private string? GetCellValue(DataTable table, string stage, string item, string columnName)
+    {
+        if (table == null || !table.Columns.Contains(columnName) || !table.Columns.Contains("Stage") || !table.Columns.Contains("Item"))
+        {
+            return null;
+        }
+
+        DataRow? row = table.AsEnumerable()
+            .FirstOrDefault(r =>
+                (r.Field<string>("Stage") ?? "") == stage &&
+                (r.Field<string>("Item") ?? "") == item);
+        return row?[columnName]?.ToString();
+    }
+
+    // 輔助方法：用於更新指定 DataTable 中的儲存格內容
+    private void UpdateCellValue(DataTable table, string stage, string item, string columnName, string newValue)
+    {
+        // 防呆判斷，確保 table 和指定的欄位都存在
+        if (table == null || !table.Columns.Contains(columnName) || !table.Columns.Contains("Stage") || !table.Columns.Contains("Item"))
+        {
+            return;
+        }
+
+        // 使用 LINQ 從 DataTable 中尋找符合條件的第一筆資料列 (DataRow)
+        // 條件：Stage 和 Item 的值必須與選中的儲存格完全相符
+        DataRow? rowToUpdate = table.AsEnumerable()
+            .FirstOrDefault(row =>
+                (row.Field<string>("Stage") ?? "") == stage &&
+                (row.Field<string>("Item") ?? "") == item);
+        // 如果找到了符合的資料列
+        if (rowToUpdate != null)
+        {
+            // 更新該列中指定欄位 (columnName) 的值
+            rowToUpdate[columnName] = newValue;
+        }
+    }
+
+    // 顯示成功 Modal 的方法
+    private async Task ShowSuccessModal()
+    {
+        try
+        {
+            // 改為呼叫我們在 app.js 中定義的函式，並傳入 Modal 的 ID
+            await JSRuntime.InvokeVoidAsync("eval", "new bootstrap.Modal(document.getElementById('successModal')).show()");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"顯示成功 Modal 時發生錯誤：{ex.Message}");
+            // 如果 JS Interop 失敗，回退到簡單的 alert 作為備用方案
+            await JSRuntime.InvokeVoidAsync("alert", successMessage);
+        }
+    }
+
+    // 計算專案數量 (總欄位數 - 固定的 'Stage' 和 'Item' 欄位)
+    private int GetProjectCount(DataTable? table)
+    {
+        // 防呆處理：如果傳入的 DataTable 是 null 或沒有任何欄位，則回傳 0
+        if (table == null || table.Columns.Count == 0) return 0;
+        // 取得目前的總欄位數
+        int projectCount = table.Columns.Count;
+        // 如果 'Stage' 欄位存在，計數就減 1
+        if (table.Columns.Contains("Stage")) projectCount--;
+        // 如果 'Item' 欄位存在，計數就再減 1
+        if (table.Columns.Contains("Item")) projectCount--;
+        // 返回最終計算結果，並確保結果不會是負數
+        return Math.Max(0, projectCount);
+    }
+    // 顯示錯誤 Modal 的方法
+    private async Task ShowErrorModal()
+    {
+        try
+        {
+            // 改為呼叫我們在 app.js 中定義的函式，並傳入 Modal 的 ID
+            await JSRuntime.InvokeVoidAsync("eval", "new bootstrap.Modal(document.getElementById('errorModal')).show()");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"顯示錯誤 Modal 時發生錯誤：{ex.Message}");
+            // 如果 JS Interop 失敗，回退到簡單的 alert 作為備用方案
+            await JSRuntime.InvokeVoidAsync("alert", errorMessage);
+        }
+    }
+
+    // 計算各種狀態的數量
+    private int GetStatusCount(string status)
+    {
+        if (projectData == null || projectData.Rows.Count == 0) return 0;
+
+        int count = 0;
+
+        // 遍歷所有非 Stage 和 Item 的專案欄位
+        foreach (DataColumn column in projectData.Columns)
+        {
+            if (column.ColumnName == "Stage" || column.ColumnName == "Item") continue;
+
+            // 遍歷該欄位下的所有儲存格
+            foreach (DataRow row in projectData.Rows)
+            {
+                string cellValue = row[column].ToString() ?? "";
+
+                // 根據狀態類型進行計數
+                switch (status)
+                {
+                    case "Non-Ready":
+                        if (cellValue.Contains("2999") ||
+                            cellValue.Equals("Non-Ready", StringComparison.OrdinalIgnoreCase) ||
+                            string.IsNullOrWhiteSpace(cellValue))
+                        {
+                            count++;
+                        }
+                        break;
+
+                    case "Ready":
+                        if (cellValue.Contains("Ready") && !cellValue.Contains("Non-Ready"))
+                        {
+                            count++;
+                        }
+                        break;
+
+                    case "Checked":
+                        if (cellValue.Contains("Checked"))
+                        {
+                            count++;
+                        }
+                        break;
+
+                    case "Approval":
+                        if (cellValue.Contains("Approval"))
+                        {
+                            count++;
+                        }
+                        break;
+
+                    case "Overdue":
+                        if (cellValue.Contains("!"))
+                        {
+                            count++;
+                        }
+                        break;
+                }
+            }
+        }
+
+        return count;
+    }
+
+    // 用於在 Modal 中顯示的當前專案名稱
+    private string modalProjectName = "";
+    private async Task OpenProjectInfoModal(string projectName)
+    {
+        modalProjectName = projectName;
+        // 直接從預先載入的字典中獲取資料，不再查詢 SQL
+        if (allProjectDetails.TryGetValue(projectName, out var details))
+        {
+            // 如果找到了快取資料，就直接使用
+            projectPersonnel = details.Personnel;
+            currentMilestones = details.Milestones;
+        }
+        else
+        {
+            // 如果在字典中找不到 (例如資料庫中就是沒有這筆專案的詳細資料)
+            // 則顯示一個空白的表單，讓使用者可以新增
+            projectPersonnel = new ProjectPersonnel();
+            // 使用 Milestone 範本來初始化，確保所有時程欄位都顯示得出來
+            currentMilestones = currentMilestones
+                .Select(m => new MilestoneInfo { ItemKey = m.ItemKey, DisplayName = m.DisplayName, Date = null })
+                .ToList();
+        }
+
+        // [修改] 改為直接呼叫 Bootstrap 5 的 Javascript API 來顯示 Modal
+        // 這樣可以避免對自訂 JS 函式 (showBootstrapModal) 的依賴，在 Hybrid 環境中更為穩健
+        await JSRuntime.InvokeVoidAsync("eval", $"new bootstrap.Modal(document.getElementById('projectInfoModal')).show()");
+        // StateHasChanged();
+        // 在這種情況下通常不是必要的，因為 Blazor 會自動偵測異步操作後的 UI 變更
+    }
+
+    // 頁面初始化或篩選條件變更時，一次性載入所有專案的詳細資訊
+    private async Task LoadAllProjectDetailsAsync()
+    {
+        // 先清除舊的快取資料
+        allProjectDetails.Clear();
+
+        // 如果沒有專案資料，就直接返回
+        if (projectData == null || projectData.Columns.Count <= 2) return;
+
+        string connectionString = _configuration.GetConnectionString("ReadConnection_A31_HWD_PWR");
+        try
+        {
+            using (SqlConnection conn = new SqlConnection(connectionString))
+            {
+                await conn.OpenAsync();
+                // SQL 查詢不再針對單一 ProjectCode，而是選取符合年份的所有資料
+                string query = @"
+                    SELECT ProjectCode, DMRole, DLRole, DERole, Schedule
+                    FROM ProjectDashboard_A31_HWD_電源部_ProjectInfo
+                    WHERE Year = @Year";
+
+                using (SqlCommand cmd = new SqlCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue("@Year", SelectedYear);
+
+                    using (SqlDataReader reader = await cmd.ExecuteReaderAsync())
+                    {
+                        // 遍歷查詢到的所有專案資訊
+                        while (await reader.ReadAsync())
+                        {
+                            var projectName = reader["ProjectCode"]?.ToString() ?? "";
+                            if (string.IsNullOrEmpty(projectName)) continue;
+
+                            var details = new ProjectDetails();
+
+                            // 1. 填入專案人員資訊
+                            details.Personnel.DM = reader["DMRole"]?.ToString() ?? "";
+                            details.Personnel.DL = reader["DLRole"]?.ToString() ?? "";
+                            details.Personnel.DE = reader["DERole"]?.ToString() ?? "";
+
+                            // 2. 解析 Schedule 欄位並填入時程資訊
+                            string scheduleData = reader["Schedule"]?.ToString() ?? "";
+
+                            // 為這個專案建立一份獨立的 Milestone 列表 (從範本複製)
+                            var projectMilestones = currentMilestones
+                                .Select(m => new MilestoneInfo { ItemKey = m.ItemKey, DisplayName = m.DisplayName })
+                                .ToList();
+
+                            // 解析資料庫來的時程字串
+                            if (!string.IsNullOrWhiteSpace(scheduleData))
+                            {
+                                var milestoneItems = scheduleData.Split('#', StringSplitOptions.RemoveEmptyEntries);
+                                foreach (var item in milestoneItems)
+                                {
+                                    var parts = item.Split(';');
+                                    if (parts.Length >= 2)
+                                    {
+                                        string milestoneName = parts[0].Trim();
+                                        string milestoneDate = parts[1].Trim();
+                                        var targetMilestone = projectMilestones.FirstOrDefault(m => m.DisplayName.Equals(milestoneName, StringComparison.OrdinalIgnoreCase));
+                                        if (targetMilestone != null)
+                                        {
+                                            targetMilestone.Date = milestoneDate;
+                                        }
+                                    }
+                                }
+                            }
+                            details.Milestones = projectMilestones;
+
+                            // 3. 將處理好的專案詳細資訊存入字典中
+                            allProjectDetails[projectName] = details;
+                        }
+                    }
+                }
+            }
+            Console.WriteLine($"已成功批次載入 {allProjectDetails.Count} 個專案的詳細資訊。");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"批次載入專案詳細資訊時發生錯誤：{ex.Message}");
+        }
+    }  
+
+
+    private async Task SaveProjectInfo()
+    {
+        isSavingProjectInfo = true;
+        // 開始儲存，顯示動畫
+        StateHasChanged();
+        try
+        {
+            // [步驟 1] 將變更的專案欄位名稱加入追蹤集合，以便後續能上傳到伺服器
+            if (!modifiedProjectColumns.Contains(modalProjectName))
+            {
+                modifiedProjectColumns.Add(modalProjectName);
+            }
+
+            // [步驟 2] 準備要寫入後端資料庫的資料
+            string dmRole = CleanMemberString(projectPersonnel.DM);
+            string dlRole = CleanMemberString(projectPersonnel.DL);
+            string deRole = CleanMemberString(projectPersonnel.DE);
+
+            // 篩選出有日期的 Milestone 項目，並存為一個列表以供後續使用
+            var updatedMilestones = currentMilestones
+                .Where(m => !string.IsNullOrWhiteSpace(m.Date))
+                .ToList();
+
+            // 遍歷所有已填寫的 Milestone，進行日期格式驗證與自動轉換
+            foreach (var milestone in updatedMilestones)
+            {
+                // 使用更寬鬆的 DateTime.TryParse 來嘗試解析多種常見的日期格式
+                if (DateTime.TryParse(milestone.Date,
+                                       System.Globalization.CultureInfo.InvariantCulture, // 使用中性文化，以更好地處理多種格式
+                                       System.Globalization.DateTimeStyles.None,
+                                       out DateTime parsedDate))
+                {
+                    // 如果轉換成功，無論使用者輸入何種格式 (例如 yyyy-M-d 或 yyyyMMdd)，都統一格式化為 "yyyy/MM/dd"
+                    // 將 "mm" (分鐘)修正為 "MM" (月份)
+                    milestone.Date = parsedDate.ToString("yyyy/MM/dd");
+                }
+                else
+                {
+                    // 如果連寬鬆的 TryParse 都無法解析，表示格式確實有問題或內容無效，才顯示錯誤
+                    // 1. 設定更詳細的錯誤訊息，將使用者輸入的錯誤內容也顯示出來
+                    errorMessage = $"儲存失敗：專案時程 '{milestone.DisplayName}' 的日期 '{milestone.Date}' 格式無法辨識。請輸入有效的日期格式 (例如: 2025/09/15)。";
+
+                    // 2. 關閉當前的編輯視窗
+                    await JSRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('projectInfoModal')).hide()");
+                    // 3. 顯示錯誤訊息視窗
+                    await ShowErrorModal();
+                    // 4. 中斷儲存流程
+                    isSavingProjectInfo = false; // 結束儲存動畫
+                    StateHasChanged();
+                    return; // 直接返回，不執行後續儲存動作
+                }
+            }
+
+            // 使用 updatedMilestones 列表來產生要存入資料庫的 scheduleString
+            string scheduleString = string.Join("#", updatedMilestones.Select(m => $"{m.DisplayName};{m.Date}"));
+            // [步驟 3] 執行後端資料庫儲存
+            string connectionString = _configuration.GetConnectionString("WriteConnection_A31_HWD_PWR");
+            using (SqlConnection conn = new SqlConnection(connectionString))
+            {
+                await conn.OpenAsync();
+                string mergeQuery = @"
+            MERGE INTO ProjectDashboard_A31_HWD_電源部_ProjectInfo AS Target
+            USING (VALUES (@ProjectCode, @Year)) AS Source (ProjectCode, Year)
+            ON Target.ProjectCode = Source.ProjectCode AND Target.Year = Source.Year
+            WHEN MATCHED THEN
+                UPDATE SET Division = @Division, Department = @Department, DMRole = @DMRole,
+                        DLRole = @DLRole, DERole = @DERole, Schedule = @Schedule, Status = @Status
+            WHEN NOT MATCHED THEN
+                INSERT (ProjectCode, Division, Department, DMRole, DLRole, DERole, Year, Schedule, Status)
+                VALUES (@ProjectCode, @Division, @Department, @DMRole, @DLRole, @DERole, @Year, @Schedule, @Status);";
+                using (SqlCommand cmd = new SqlCommand(mergeQuery, conn))
+                {
+                    cmd.Parameters.AddWithValue("@ProjectCode", modalProjectName);
+                    cmd.Parameters.AddWithValue("@Year", SelectedYear);
+                    cmd.Parameters.AddWithValue("@Division", _userInfoService.UserDivision ?? "A31_HWD");
+                    cmd.Parameters.AddWithValue("@Department", SelectedHwOption);
+                    cmd.Parameters.AddWithValue("@DMRole", dmRole);
+                    cmd.Parameters.AddWithValue("@DLRole", dlRole);
+                    cmd.Parameters.AddWithValue("@DERole", deRole);
+                    cmd.Parameters.AddWithValue("@Schedule", scheduleString);
+                    cmd.Parameters.AddWithValue("@Status", "進行中");
+
+                    await cmd.ExecuteNonQueryAsync();
+                    Console.WriteLine($"專案 '{modalProjectName}' 的詳細資訊已成功儲存至資料庫。");
+                }
+            }
+            // 專案資訊儲存成功後，立即呼叫通用的日期更新函式
+            // 這樣會根據使用者剛剛修改的 Milestone，重新計算所有相關的任務時程
+            await ProcessProjectCellUpdates(modalProjectName, SelectedYear, SelectedHwOption);
+
+
+            // [步驟 4] 關閉編輯 Modal 並顯示成功訊息
+            await JSRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('projectInfoModal')).hide()");
+
+            // 設定成功訊息內容
+            successMessage = $"專案 '{modalProjectName}' 的資訊已成功儲存。";
+            successDetails.Clear();
+            successDetails.Add($"<strong>專案人員 (已更新):</strong>");
+            successDetails.Add($"&bull; DM: {(!string.IsNullOrWhiteSpace(dmRole) ? dmRole : "未設定")}");
+            successDetails.Add($"&bull; DL: {(!string.IsNullOrWhiteSpace(dlRole) ? dlRole : "未設定")}");
+            successDetails.Add($"&bull; DE: {(!string.IsNullOrWhiteSpace(deRole) ? deRole : "未設定")}");
+
+            if (updatedMilestones.Any())
+            {
+                // 產生更詳細的成功訊息標頭，加上冒號
+                successDetails.Add($"<hr class='my-2'><strong>專案時程 (共 {updatedMilestones.Count} 項已更新):</strong>");
+                // 遍歷所有更新的 Milestone，將每一項的名稱和日期都加入到詳細清單中
+                foreach (var milestone in updatedMilestones)
+                {
+                    successDetails.Add($"&bull; {milestone.DisplayName}: <strong>{milestone.Date}</strong>");
+                }
+            }
+            updatedRecordsCount = 1;
+            // 代表一筆專案資訊紀錄
+
+            await ShowSuccessModal();
+            // 顯示成功 Modal
+        }
+        catch (Exception ex)
+        {
+            // 錯誤處理流程
+            Console.WriteLine($"儲存專案資訊至資料庫時發生錯誤：{ex.Message}");
+            errorMessage = $"儲存專案資訊失敗：{ex.Message}";
+            // 關閉編輯視窗，再顯示錯誤視窗，避免疊加
+            await JSRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('projectInfoModal')).hide()");
+            await ShowErrorModal();
+        }
+        finally
+        {
+            isSavingProjectInfo = false;
+            // 無論成功或失敗，都結束儲存狀態，隱藏動畫
+            StateHasChanged();
+            // 通知 Blazor 刷新介面
+        }
+    }
+    // 記錄核准/取消核准操作至資料庫
+    private async Task LogReviewActionAsync(string reviewAction)
+    {
+        // 檢查是否有執行紀錄所需的上下文資訊
+        if (string.IsNullOrEmpty(selectedProjectName) || string.IsNullOrEmpty(selectedStage) || string.IsNullOrEmpty(selectedItem))
+        {
+            Console.WriteLine("無法記錄審核操作：缺少專案、階段或項目的上下文資訊。");
+            return;
+        }
+
+        // 取得寫入資料庫的連線字串
+        string connectionString = _configuration.GetConnectionString("WriteConnection_A31_HWD");
+        if (string.IsNullOrEmpty(connectionString))
+        {
+            // [修正] 錯誤訊息中的連線字串名稱應與程式碼一致
+            Console.WriteLine("無法記錄審核操作：未設定 'WriteConnection_A31_HWD' 連線字串。");
+            return;
+        }
+
+        var actionTime = DateTime.Now;
+
+        // 在此呼叫新方法以取得使用者在該專案下的特定角色
+        string userProjectRole = GetUserRoleForProject(selectedProjectName);
+
+        using (var conn = new SqlConnection(connectionString))
+        {
+            try
+            {
+                await conn.OpenAsync();
+                var commandText = @"
+                    INSERT INTO A31_HWD_Portal_Dashboard_Review_Record
+                    (Division, Department, UserName, UserProjectRole, ProjectYear, ProjectCode, Stage, Item, Action, ActionTime)
+                    VALUES
+                    (@Division, @Department, @UserName, @UserProjectRole, @ProjectYear, @ProjectCode, @Stage, @Item, @Action, @ActionTime)";
+
+                using (var cmd = new SqlCommand(commandText, conn))
+                {
+                    cmd.Parameters.AddWithValue("@Division", _userInfoService.UserDivision ?? "A31_HWD");
+                    cmd.Parameters.AddWithValue("@Department", SelectedHwOption ?? "N/A");
+                    cmd.Parameters.AddWithValue("@UserName", _userInfoService.UserName ?? "N/A");
+                    // 將參數值改為從 GetUserRoleForProject() 取得的 userProjectRole
+                    cmd.Parameters.AddWithValue("@UserProjectRole", userProjectRole);
+                    cmd.Parameters.AddWithValue("@ProjectYear", SelectedYear);
+                    cmd.Parameters.AddWithValue("@ProjectCode", selectedProjectName);
+                    cmd.Parameters.AddWithValue("@Stage", selectedStage);
+                    cmd.Parameters.AddWithValue("@Item", selectedItem);
+                    cmd.Parameters.AddWithValue("@Action", reviewAction); // 'checked' or 'unchecked'
+                    cmd.Parameters.AddWithValue("@ActionTime", actionTime);
+
+                    await cmd.ExecuteNonQueryAsync();
+                    Console.WriteLine($"已成功記錄一筆 '{reviewAction}' 操作至 Review_Record 資料表。");
+                }
+            }
+            catch (Exception ex)
+            {
+                // 記錄錯誤，但不中斷前端操作
+                Console.WriteLine($"記錄審核操作 '{reviewAction}' for project {selectedProjectName} 失敗: {ex.Message}");
+            }
+        }
+    }
+
+    private void UpdateCellValue(DataTable table, string item, string columnName, string newValue)
+    {
+        if (table == null || !table.Columns.Contains(columnName) || !table.Columns.Contains("Item"))
+        {
+            return;
+        }
+
+        DataRow? rowToUpdate = table.AsEnumerable()
+            .FirstOrDefault(row => (row.Field<string>("Item") ?? "") == item);
+        if (rowToUpdate != null)
+        {
+            // 直接更新傳入的值，不再額外加上星號
+            rowToUpdate[columnName] = newValue;
+        }
+    }
+    private string CleanMemberString(string? input)
+    {
+        if (string.IsNullOrEmpty(input)) return string.Empty;
+        // 1. 將多人時可能出現的中英文逗號統一替換為分號
+        var cleaned = input.Replace(",", ";").Replace("，", ";");
+        // 2. 移除所有空白字元
+        cleaned = Regex.Replace(cleaned, @"\s+", "");
+        // 3. 忽略大小寫，移除 @compal.com 後綴
+        cleaned = Regex.Replace(cleaned, "@compal\\.com", "", RegexOptions.IgnoreCase);
+        return cleaned;
+    }
+    // 建立一個專門用來存放 Milestone 所有資訊的 class
+    private class MilestoneInfo
+    {
+        // 用於後端邏輯和資料綁定的唯一 Key (例如: SOW_001)
+        public string ItemKey { get; set; } = "";
+        // 用於在 UI 上顯示的名稱 (例如: RFI close)
+        public string DisplayName { get; set; } = "";
+        // 使用者輸入的日期
+        public string? Date { get; set; }
+    }
+
+    // 開啟 "新增專案資訊" Modal 的方法
+    private async Task OpenAddProjectModal()
+    {
+        // 重設所有欄位為初始狀態
+        newProjectName = "";
+        newProjectPersonnel = new ProjectPersonnel();
+        newProjectMilestones.Clear();
+
+        // 預設帶入當前儀表板的篩選條件
+        newProjectYear = SelectedYear;
+        newProjectDepartment = SelectedHwOption;
+
+        // 根據預設的年分與部門載入對應的 Milestone 範本
+        await LoadMilestonesForNewProject();
+
+        // 顯示 Modal
+        await JSRuntime.InvokeVoidAsync("eval", "new bootstrap.Modal(document.getElementById('addProjectModal')).show()");
+    }
+
+    // 當新增 Modal 中的年份或部門變更時，重新載入 Milestone 範本
+    private async Task OnNewProjectContextChanged()
+    {
+        await LoadMilestonesForNewProject();
+    }
+
+    // 為 "新增專案" Modal 載入 Milestone 範本
+    private async Task LoadMilestonesForNewProject()
+    {
+        // 此處邏輯與 LoadMilestoneData 幾乎相同，但操作的是 newProjectMilestones
+        // 注意：此處假設所有部門的 SOW 範本都來自 "電源部"，與現有邏輯一致
+        string readsheet = $"ProjectDashboard_A31_HWD_電源部_SOW_{newProjectYear}";
+        var milestoneTemplateData = await Task.Run(() => ReadSQLdata(readsheet));
+
+        newProjectMilestones.Clear();
+        if (milestoneTemplateData != null)
+        {
+            foreach (DataRow row in milestoneTemplateData.Rows)
+            {
+                var displayName = row["D-Date"]?.ToString();
+                var itemKey = row["Item"]?.ToString();
+
+                if (!string.IsNullOrWhiteSpace(displayName) && !string.IsNullOrWhiteSpace(itemKey))
+                {
+                    newProjectMilestones.Add(new MilestoneInfo
+                        {
+                            ItemKey = itemKey,
+                            DisplayName = displayName
+                            // Date 預設為 null
+                        });
+                }
+            }
+        }
+        // 使用 InvokeAsync 確保在 Modal 內部的 UI 更新能被正確渲染
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // 儲存新的專案資訊至後端資料庫
+    private async Task SaveNewProjectInfo()
+    {
+        // 驗證專案名稱是否為空
+        if (string.IsNullOrWhiteSpace(newProjectName))
+        {
+            errorMessage = "儲存失敗：[專案名稱] 為必填欄位。";
+            await JSRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('addProjectModal')).hide()");
+            await ShowErrorModal();
+            return;
+        }
+
+        isSavingNewProject = true;
+        StateHasChanged();
+        try
+        {
+            // 步驟 1: 準備人員與時程資料
+            string dmRole = CleanMemberString(newProjectPersonnel.DM);
+            string dlRole = CleanMemberString(newProjectPersonnel.DL);
+            string deRole = CleanMemberString(newProjectPersonnel.DE);
+
+            var updatedMilestones = newProjectMilestones
+                .Where(m => !string.IsNullOrWhiteSpace(m.Date))
+                .ToList();
+            // 步驟 2: 日期格式驗證與轉換
+            foreach (var milestone in updatedMilestones)
+            {
+                if (DateTime.TryParse(milestone.Date, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out DateTime parsedDate))
+                {
+                    milestone.Date = parsedDate.ToString("yyyy/MM/dd");
+                }
+                else
+                {
+                    errorMessage = $"儲存失敗：時程 '{milestone.DisplayName}' 的日期 '{milestone.Date}' 格式無法辨識。";
+                    await JSRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('addProjectModal')).hide()");
+                    await ShowErrorModal();
+                    isSavingNewProject = false;
+                    StateHasChanged();
+                    return;
+                }
+            }
+
+            string scheduleString = string.Join("#", updatedMilestones.Select(m => $"{m.DisplayName};{m.Date}"));
+            // 步驟 3: 執行資料庫儲存 (使用 MERGE 語法，若專案已存在則更新，否則新增)
+            string connectionString = _configuration.GetConnectionString("WriteConnection_A31_HWD_PWR");
+            using (SqlConnection conn = new SqlConnection(connectionString))
+            {
+                await conn.OpenAsync();
+                // 增加 transaction 確保兩張表的更新要麼都成功，要麼都失敗
+                using var transaction = conn.BeginTransaction();
+
+                try
+                {
+                    string mergeQuery = @"
+                        MERGE INTO ProjectDashboard_A31_HWD_電源部_ProjectInfo AS Target
+                        USING (VALUES (@ProjectCode, @Year)) AS Source (ProjectCode, Year)
+                        ON Target.ProjectCode = Source.ProjectCode AND Target.Year = Source.Year
+                        WHEN MATCHED THEN
+                            UPDATE SET Division = @Division, Department = @Department, DMRole = @DMRole,
+                                       DLRole = @DLRole, DERole = @DERole, Schedule = @Schedule, Status = @Status
+                        WHEN NOT MATCHED THEN
+                            INSERT (ProjectCode, Division, Department, DMRole, DLRole, DERole, Year, Schedule, Status)
+                            VALUES (@ProjectCode, @Division, @Department, @DMRole, @DLRole, @DERole, @Year, @Schedule, @Status);";
+                    using (SqlCommand cmd = new SqlCommand(mergeQuery, conn, transaction)) // 將 transaction 加入 command
+                    {
+                        cmd.Parameters.AddWithValue("@ProjectCode", newProjectName.Trim());
+                        cmd.Parameters.AddWithValue("@Year", newProjectYear);
+                        cmd.Parameters.AddWithValue("@Division", _userInfoService.UserDivision ?? "A31_HWD");
+                        cmd.Parameters.AddWithValue("@Department", newProjectDepartment);
+                        cmd.Parameters.AddWithValue("@DMRole", dmRole);
+                        cmd.Parameters.AddWithValue("@DLRole", dlRole);
+                        cmd.Parameters.AddWithValue("@DERole", deRole);
+                        cmd.Parameters.AddWithValue("@Schedule", scheduleString);
+                        cmd.Parameters.AddWithValue("@Status", "進行中");
+                        await cmd.ExecuteNonQueryAsync();
+                    }
+
+                    // 步驟 3.5: 將新專案作為一個新的 "欄位" 新增到對應的儀表板資料表中
+                    string dashboardTableName = $"ProjectDashboard_{newProjectDepartment}_{newProjectYear}";
+                    string newColumnName = newProjectName.Trim();
+
+                    // 查詢該欄位是否已存在
+                    string checkColumnQuery = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @TableName AND COLUMN_NAME = @ColumnName";
+                    using (var checkCmd = new SqlCommand(checkColumnQuery, conn, transaction)) // 將 transaction 加入 command
+                    {
+                        checkCmd.Parameters.AddWithValue("@TableName", dashboardTableName);
+                        checkCmd.Parameters.AddWithValue("@ColumnName", newColumnName);
+                        int columnExists = (int)await checkCmd.ExecuteScalarAsync();
+
+                        if (columnExists == 0)
+                        {
+                            // 如果欄位不存在，則執行 ALTER TABLE 來新增欄位
+                            // 設定預設值為空字串('')，滿足 stage-item 內容留空的需求
+                            // 將 NULL 改為 NOT NULL，強制 SQL Server 為所有現有資料列填入 Default 值('')
+                            string alterTableQuery = $"ALTER TABLE [{dashboardTableName}] ADD [{newColumnName}] NVARCHAR(MAX) NOT NULL DEFAULT ''";
+                            using (var alterCmd = new SqlCommand(alterTableQuery, conn, transaction)) // 將 transaction 加入 command
+                            {
+                                await alterCmd.ExecuteNonQueryAsync();
+                                Console.WriteLine($"已成功在資料表 '{dashboardTableName}' 中新增欄位 '{newColumnName}'。");
+                            }
+
+                            // 接著，立即將這個新欄位的所有儲存格內容更新為 'Non-Ready'
+                            // 增加 WHERE 條件，只更新 Item 欄位不為空值的資料列
+                            string updateQuery = $"UPDATE [{dashboardTableName}] SET [{newColumnName}] = 'Non-Ready' WHERE [Item] IS NOT NULL AND [Item] != ''";
+                            using (var updateCmd = new SqlCommand(updateQuery, conn, transaction))
+                            {
+                                await updateCmd.ExecuteNonQueryAsync();
+                                Console.WriteLine($"已將新欄位 '{newColumnName}' 的所有儲存格初始值設為 'Non-Ready'。");
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine($"欄位 '{newColumnName}' 已存在於資料表 '{dashboardTableName}' 中，無需新增。");
+                        }
+                    }
+
+                    // 如果所有操作都成功，提交 transaction
+                    transaction.Commit();
+                }
+                catch (Exception ex)
+                {
+                    // 如果有任何錯誤，回滾 transaction
+                    transaction.Rollback();
+                    // 重新拋出異常，讓外層的 try-catch 捕捉並顯示錯誤訊息
+                    throw new Exception("在資料庫同步新專案時發生錯誤。", ex);
+                }
+            }
+
+            // 步驟 4: 顯示成功訊息並重新載入儀表板資料
+            await JSRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('addProjectModal')).hide()");
+            successMessage = $"專案 '{newProjectName.Trim()}' 的資訊已成功新增/更新。";
+            successDetails.Clear();
+            updatedRecordsCount = 1;
+            await ShowSuccessModal();
+            // 重新載入儀表板資料以顯示新專案
+            await LoadProjectData();
+            await LoadAllProjectDetailsAsync();
+
+            // 步驟 5: 處理新專案欄位的初始內容 (Non-Ready) 與時程對應
+            var finalProjectName = newProjectName.Trim();
+            // 直接傳入新專案的名稱、年份和部門，不再傳入 filledMilestones
+            // 子程式將直接從資料庫讀取最新資訊，不再依賴前端的暫存資料
+            await ProcessProjectCellUpdates(finalProjectName, newProjectYear, newProjectDepartment);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"新增專案時發生錯誤：{ex.Message}";
+            await JSRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('addProjectModal')).hide()");
+            await ShowErrorModal();
+        }
+        finally
+        {
+            isSavingNewProject = false;
+            StateHasChanged();
+        }
+    }
+    // 重構此方法以提高比對的穩定性與效率，並加入詳細的偵錯(Debug)資訊
+    private async Task ProcessProjectCellUpdates(string projectName, int projectYear, string? projectDepartment)
+    {
+        if (projectData == null || !projectData.Columns.Contains(projectName) || string.IsNullOrEmpty(projectDepartment))
+        {
+            Console.WriteLine("ProcessProjectCellUpdates 中止：缺少必要的參數 (projectData, projectName, projectDepartment)。");
+            return;
+        }
+
+        // Debug: 標記處理流程開始
+        Console.WriteLine($"[DEBUG] --- Starting ProcessProjectCellUpdates for Project: {projectName} ---");
+        var updatesToCommit = new List<(string Stage, string Item, string NewValue)>();
+        foreach (DataRow row in projectData.Rows)
+        {
+            if (projectData.Columns.Contains("Item") && !string.IsNullOrEmpty(row["Item"]?.ToString()))
+            {
+                var stage = projectData.Columns.Contains("Stage") ? row["Stage"]?.ToString() ?? "" : "";
+                var item = row["Item"].ToString()!;
+                var initialValue = "Non-Ready";
+                row[projectName] = initialValue;
+                updatesToCommit.Add((stage, item, initialValue));
+            }
+        }
+
+        try
+        {
+            string connectionString = _configuration.GetConnectionString("WriteConnection_A31_HWD_PWR");
+            using var conn = new SqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            string tableNameDepartment = projectDepartment;
+            if (projectDepartment == "PWR1" || projectDepartment == "PWR2")
+            {
+                tableNameDepartment = "電源部";
+            }
+            else if (projectDepartment == "HW1" || projectDepartment == "HW2" || projectDepartment == "HW3" || projectDepartment == "HW4")
+            {
+                tableNameDepartment = "硬體部";
+            }
+
+            var projectMilestones = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            string infoTableName = $"ProjectDashboard_A31_HWD_{tableNameDepartment}_ProjectInfo";
+            string scheduleQuery = $"SELECT Schedule FROM [{infoTableName}] WHERE ProjectCode = @ProjectCode AND Year = @Year";
+            using (var scheduleCmd = new SqlCommand(scheduleQuery, conn))
+            {
+                scheduleCmd.Parameters.AddWithValue("@ProjectCode", projectName);
+                scheduleCmd.Parameters.AddWithValue("@Year", projectYear);
+                var scheduleResult = await scheduleCmd.ExecuteScalarAsync();
+
+                if (scheduleResult != null && scheduleResult != DBNull.Value)
+                {
+                    string scheduleData = scheduleResult.ToString()!;
+                    var entries = scheduleData.Split('#', StringSplitOptions.RemoveEmptyEntries);
+                    foreach (var entry in entries)
+                    {
+                        var parts = entry.Split(';');
+                        if (parts.Length == 2 && !string.IsNullOrWhiteSpace(parts[0]) && !string.IsNullOrWhiteSpace(parts[1]))
+                        {
+                            projectMilestones[parts[0].Trim()] = parts[1].Trim();
+                        }
+                    }
+                }
+            }
+
+            // Debug: 顯示讀取到的 Milestone 數量
+            Console.WriteLine($"[DEBUG] Populated {projectMilestones.Count} project milestones.");
+            if (!projectMilestones.Any())
+            {
+                // Debug: 提示沒有 Milestone，將中止後續處理
+                Console.WriteLine("[DEBUG] No milestones found for this project. Aborting SOW processing.");
+                return;
+            }
+
+            var sowRules = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            string sowTableName = $"ProjectDashboard_A31_HWD_{tableNameDepartment}_SOW_{projectYear}";
+            // 將查詢的欄位從 [D-Date] 改為 [D-X]
+            string sowQuery = $"SELECT Item, [D-X] FROM [{sowTableName}] WHERE [D-X] IS NOT NULL AND [D-X] != ''";
+            using (var sowCmd = new SqlCommand(sowQuery, conn))
+            using (var reader = await sowCmd.ExecuteReaderAsync())
+            {
+                while (await reader.ReadAsync())
+                {
+                    var item = reader["Item"]?.ToString()?.Trim();
+                    // 讀取正確的 [D-X] 欄位作為規則
+                    var dDateRule = reader["D-X"]?.ToString()?.Trim();
+                    if (!string.IsNullOrEmpty(item) && !string.IsNullOrEmpty(dDateRule))
+                    {
+                        sowRules[item] = dDateRule;
+                    }
+                }
+            }
+            // Debug: 顯示讀取到的 SOW 規則數量
+            Console.WriteLine($"[DEBUG] Populated {sowRules.Count} SOW rules from the database.");
+
+            // Debug: 標記開始處理資料列
+            Console.WriteLine("[DEBUG] --- Starting to process projectData rows ---");
+            foreach (DataRow row in projectData.Rows)
+            {
+                var itemToUpdate = row["Item"]?.ToString()?.Trim();
+                if (string.IsNullOrEmpty(itemToUpdate)) continue;
+
+                // 檢查儲存格的現有狀態，如果已是 Ready/Checked/Approval 則跳過，不進行更新
+                var currentCellValue = row[projectName]?.ToString() ?? "";
+
+                // 修正 Contains("Ready") 會誤判 "Non-Ready" 的問題。
+                // 先移除星號再進行精確比對，這樣可以同時處理 "Ready" 和 "*Ready" 等情況。
+                var cleanedCellValue = currentCellValue.Replace("*", "").Trim();
+                if (cleanedCellValue.Equals("Ready", StringComparison.OrdinalIgnoreCase) ||
+                    cleanedCellValue.Equals("Checked", StringComparison.OrdinalIgnoreCase) ||
+                    cleanedCellValue.Equals("Approval", StringComparison.OrdinalIgnoreCase))
+                {
+                    Console.WriteLine($"[DEBUG]  -> Skipping Item '{itemToUpdate}' because its status is '{currentCellValue}'.");
+                    continue;
+                }
+
+
+                // Debug: 顯示正在處理的 Item 名稱
+                Console.WriteLine($"[DEBUG] Processing Item: '{itemToUpdate}'");
+                if (sowRules.TryGetValue(itemToUpdate, out var dDateRule))
+                {
+                    // Debug: 顯示找到了對應的 SOW 規則
+                    Console.WriteLine($"[DEBUG]  -> Found SOW Rule: '{dDateRule}'");
+
+                    string? dateValue = CalculateDateFromRule(dDateRule, projectMilestones);
+
+                    if (dateValue != null)
+                    {
+
+                        // Debug 訊息改回只顯示計算出的日期
+                        Console.WriteLine($"[DEBUG]  -> Calculated Date: '{dateValue}'. Updating cell.");
+
+                        // 直接使用計算出的乾淨日期 (dateValue) 來更新 DataTable
+                        row[projectName] = dateValue;
+
+                        var stage = row["Stage"]?.ToString() ?? "";
+                        updatesToCommit.RemoveAll(u => (u.Item?.Trim() ?? "").Equals(itemToUpdate, StringComparison.OrdinalIgnoreCase));
+
+                        // 將乾淨的日期 (dateValue) 加入待辦清單
+                        updatesToCommit.Add((stage, itemToUpdate, dateValue));
+                    }
+                    else
+                    {
+                        // Debug: 提示無法從規則計算出日期
+                        Console.WriteLine($"[DEBUG]  -> FAILED to calculate date from rule '{dDateRule}'. Check if base milestone exists.");
+                    }
+                }
+                else
+                {
+                    // Debug: 提示找不到對應的 SOW 規則
+                    Console.WriteLine($"[DEBUG]  -> No SOW rule found for this item.");
+                }
+
+            }
+            // Debug: 標記處理資料列結束
+            Console.WriteLine("[DEBUG] --- Finished processing projectData rows ---");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"在 ProcessProjectCellUpdates 中讀取資料庫時發生錯誤: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("showToast", "更新專案時程時發生資料庫錯誤。", "danger");
+        }
+        finally
+        {
+            // Debug: 顯示最終要寫入資料庫的更新筆數
+            Console.WriteLine($"[DEBUG] Committing {updatesToCommit.Count} updates to the database.");
+
+            var updateTasks = updatesToCommit.Select(update =>
+                UpdateSourceTableAsync(projectName, update.Stage, update.Item, update.NewValue, showNotification: false));
+            await Task.WhenAll(updateTasks);
+
+            if (updatesToCommit.Any())
+            {
+                await JSRuntime.InvokeVoidAsync("showToast", $"專案 {projectName} 的 {updatesToCommit.Count} 個項目初始狀態已同步完成。", "success");
+            }
+
+            ApplyFilter();
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    // 輔助方法：根據 D-Date 規則和專案時程字典，計算出最終日期
+    private string? CalculateDateFromRule(string dDateRule, Dictionary<string, string> projectMilestones)
+    {
+        // 使用 Regex 解析 "Milestone名稱 +|- 天數" 這種格式
+        var regex = new Regex(@"^(.*?)\s*([+-])\s*(\d+)$", RegexOptions.IgnoreCase);
+        var match = regex.Match(dDateRule);
+
+        string baseMilestoneName;
+        string? baseDateString;
+
+        if (match.Success)
+        {
+            // 如果是公式 (例如 "EVT gerber date - 1")
+            baseMilestoneName = match.Groups[1].Value.Trim();
+            char operation = match.Groups[2].Value[0];
+            int days = int.Parse(match.Groups[3].Value);
+            int offset = (operation == '+') ? days : -days;
+
+            // 嘗試從專案時程字典中找到基礎 Milestone 的日期
+            if (projectMilestones.TryGetValue(baseMilestoneName, out baseDateString))
+            {
+                // 如果找到了，就進行日期計算
+                if (DateTime.TryParse(baseDateString, out DateTime baseDate))
+                {
+                    return baseDate.AddDays(offset).ToString("yyyy/MM/dd");
+                }
+            }
+        }
+        else
+        {
+            // 如果不是公式，則視為直接對應 (例如 "EVT gerber date")
+            baseMilestoneName = dDateRule.Trim();
+            if (projectMilestones.TryGetValue(baseMilestoneName, out baseDateString))
+            {
+                // 驗證日期格式是否正確，如果正確才回傳
+                if (DateTime.TryParse(baseDateString, out DateTime baseDate))
+                {
+                    return baseDate.ToString("yyyy/MM/dd");
+                }
+            }
+        }
+
+        // 如果規則無法解析或找不到對應的基礎日期，則回傳 null
+        return null;
+    }
+
+    // showNotification 參數，用於控制是否顯示 Toast 通知
+    private async Task UpdateSourceTableAsync(string projectName, string stage, string item, string newValue, bool showNotification = true)
+    {
+        // 防呆：確保所有必要資訊都存在
+        if (string.IsNullOrEmpty(projectName) || string.IsNullOrEmpty(stage) || string.IsNullOrEmpty(item) || string.IsNullOrEmpty(SelectedHwOption) || SelectedYear == 0)
+        {
+            Console.WriteLine("缺少更新來源資料表的必要資訊，操作已中止。");
+            return;
+        }
+
+        // 組合目標資料表名稱
+        string tableName = $"ProjectDashboard_{SelectedHwOption}_{SelectedYear}";
+        // 取得寫入用的連線字串
+        string connectionString = _configuration.GetConnectionString("WriteConnection_A31_HWD_PWR");
+        if (string.IsNullOrEmpty(connectionString))
+        {
+            Console.WriteLine($"無法更新來源資料表：未設定 'WriteConnection_A31_HWD_PWR' 連線字串。");
+            // 只有在需要時才顯示 Toast
+            if (showNotification)
+            {
+                await JSRuntime.InvokeVoidAsync("showToast", "資料庫連線設定錯誤，無法同步。", "danger");
+            }
+            return;
+        }
+
+        // 準備 SQL UPDATE 陳述式
+        // 注意：欄位名稱不能當作參數傳遞，所以需要直接組合到字串中。
+        // 在此應用情境中，projectName 來自資料庫的欄位名稱，所以是安全的。
+        string commandText = $@"
+        UPDATE [{tableName}]
+        SET [{projectName}] = @NewValue
+        WHERE [Stage] = @Stage AND [Item] = @Item";
+        try
+        {
+            using (var conn = new SqlConnection(connectionString))
+            {
+                await conn.OpenAsync();
+                using (var cmd = new SqlCommand(commandText, conn))
+                {
+                    // 移除值中的 '*' 標記，因為這是前端用來標示變更的，資料庫中應儲存乾淨的值
+                    cmd.Parameters.AddWithValue("@NewValue", newValue.Replace("*", ""));
+                    cmd.Parameters.AddWithValue("@Stage", stage);
+                    cmd.Parameters.AddWithValue("@Item", item);
+
+                    int rowsAffected = await cmd.ExecuteNonQueryAsync();
+
+                    if (rowsAffected > 0)
+                    {
+                        // 只有在需要時才顯示 Toast
+                        if (showNotification)
+                        {
+                            await JSRuntime.InvokeVoidAsync("showToast", $"專案 {projectName} 的狀態已同步。", "success");
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine($"警告：更新資料表 '{tableName}' 時，找不到符合條件的資料列 (Stage='{stage}', Item='{item}')。");
+                        // 只有在需要時才顯示 Toast
+                        if (showNotification)
+                        {
+                            await JSRuntime.InvokeVoidAsync("showToast", $"在資料庫中找不到對應的項目，可能資料已被移動。", "warning");
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // 記錄錯誤，但不影響前端操作
+            Console.WriteLine($"直接更新來源資料表 '{tableName}' 時發生錯誤: {ex.Message}");
+            // 只有在需要時才顯示 Toast
+            if (showNotification)
+            {
+                await JSRuntime.InvokeVoidAsync("showToast", $"與資料庫同步時發生錯誤。", "danger");
+            }
+        }
+    }
+}

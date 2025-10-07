@@ -1,0 +1,79 @@
+﻿/* [新增] 沿用 FileUploadModal 的樣式並針對下載功能進行修改 */
+
+/* 檔案清單容器 */
+.file-list-container {
+    max-height: 400px; /* 增加最大高度以容納更多檔案 */
+    overflow-y: auto;
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+    padding: 0; /* 移除內邊距，由項目自己控制 */
+}
+
+/* 檔案清單中的每個項目 */
+.file-list-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem; /* 增加垂直內邊距，使其更開闊 */
+    border-bottom: 1px solid #e9ecef;
+    transition: background-color 0.2s ease;
+}
+
+    .file-list-item:hover {
+        background-color: #f8f9fa; /* 滑鼠懸停效果 */
+    }
+
+    .file-list-item:last-child {
+        border-bottom: none;
+    }
+
+    /* 清單標頭，用於放置"全選" */
+    .file-list-item.list-header {
+        background-color: #f8f9fa;
+        font-size: 0.8rem;
+        color: #495057;
+        padding: 0.5rem 1rem;
+    }
+
+        .file-list-item.list-header span {
+            font-weight: 500;
+        }
+
+.file-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-grow: 1;
+    min-width: 0;
+}
+
+.file-name {
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.file-size {
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums; /* 讓數字等寬，對齊更好看 */
+    min-width: 80px; /* 給一個最小寬度，避免大小變動時跳動 */
+    text-align: right;
+}
+
+.form-check {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding-left: 0; /* 移除 Bootstrap 預設的 padding */
+}
+
+.form-check-input {
+    margin-left: 0; /* 移除預設的 margin */
+}
+
+.form-check-label {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+}

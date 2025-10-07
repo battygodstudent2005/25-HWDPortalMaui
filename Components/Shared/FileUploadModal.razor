@@ -1,0 +1,316 @@
+﻿@inject IJSRuntime JSRuntime
+@using Microsoft.Extensions.Logging
+@inject ILogger<FileUploadModal> Logger
+
+@* 上傳視窗的完整 Modal 結構 *@
+<div class="modal fade" id="fileUploadModal" tabindex="-1" aria-labelledby="fileUploadModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="fileUploadModalLabel">
+                    <i class="bi bi-cloud-upload me-2"></i>上傳/修改文件  
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" @onclick="Close"></button>
+            </div>
+            <div class="modal-body">
+                @* [新增] 顯示已存在檔案的區塊 *@
+                @if (existingFiles.Any())
+                {
+                    <h6 class="list-title">
+                        <i class="bi bi-folder-check me-2"></i>目前已上傳的檔案
+                    </h6>
+                    <div class="file-list-container mb-3">
+                        @foreach (var fileName in existingFiles)
+                        {
+                            <div class="file-list-item">
+                                <div class="file-info">
+                                    <i class="bi bi-file-earmark-text me-2 fs-4 text-success"></i>
+                                    <div class="file-name" title="@fileName">@fileName</div>
+                                </div>
+                                <div class="file-action">
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteFile(fileName)" title="刪除檔案">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+
+                @* [新增] 分隔線與標題 *@
+                <h6 class="list-title">
+                    <i class="bi bi-file-earmark-arrow-up me-2"></i>新增或覆蓋檔案
+                </h6>
+
+                @* 拖放區域與隱藏的檔案選擇器 *@
+                <div class="drop-zone @(_isDragOver ? "drag-over" : "")"
+                     @ondragenter="HandleDragEnter"
+                     @ondragleave="HandleDragLeave"
+                     @ondragover="HandleDragOver"
+                     @ondrop="HandleDrop">
+                    <InputFile id="fileInput" OnChange="LoadFiles" multiple hidden />
+                    <label for="fileInput" class="drop-zone-label">
+                        <i class="bi bi-files display-4 mb-3"></i>
+                        <p class="mb-1">將檔案拖曳至此，或 <span class="text-primary">點擊此處</span> 選擇檔案</p>
+                        <small class="text-muted">若上傳同名檔案將會覆蓋舊檔</small>
+                    </label>
+                </div>
+
+                @* 待上傳檔案清單 *@
+                @if (fileList.Any())
+                {
+                    <div class="file-list-container mt-3">
+                        @foreach (var fileState in fileList)
+                        {
+                            <div class="file-list-item">
+                                <div class="file-info">
+                                    <i class="bi bi-file-earmark-arrow-up me-2 fs-4"></i>
+                                    <div>
+                                        <div class="file-name" title="@fileState.File.Name">@fileState.File.Name</div>
+                                        <small class="text-muted">@FormatBytes(fileState.File.Size)</small>
+                                    </div>
+                                </div>
+                                <div class="file-status">
+                                    <div class="progress" style="height: 20px;">
+                                        <div class="progress-bar @fileState.ProgressBarClass" role="progressbar" style="width: @fileState.Progress%;"
+                                             aria-valuenow="@fileState.Progress" aria-valuemin="0" aria-valuemax="100">
+                                            @fileState.Status
+                                        </div>
+                                    </div>
+                                    <button class="btn btn-sm btn-outline-danger ms-2 @(fileState.IsUploading ? "" : "d-none")" @onclick="() => fileState.Cts?.Cancel()">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <div class="me-auto text-muted small">
+                    已選取 @fileList.Count 個檔案，總大小: @FormatBytes(totalSize)
+                </div>
+                <button type="button" class="btn btn-secondary" @onclick="Close">
+                    <i class="bi bi-x-circle me-2"></i>關閉
+                </button>
+                <button type="button" class="btn btn-primary" @onclick="UploadAllFiles" disabled="@(isUploading || !fileList.Any())">
+                    @if (isUploading)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        <span>上傳中... (@uploadProgress)</span>
+                    }
+                    else
+                    {
+                        <span><i class="bi bi-upload me-2"></i>開始上傳</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    // 接收從父元件傳來的參數，這是上傳的目標路徑
+    [Parameter] public string TargetUploadPath { get; set; } = string.Empty;
+    // OnUploadsCompleted 的簽名，使其能夠回傳上傳成功的檔案名稱列表
+    [Parameter] public EventCallback<List<string>> OnUploadsCompleted { get; set; }
+    // [新增] 檔案刪除後觸發的事件回呼，用於通知父元件
+    [Parameter] public EventCallback<string> OnFileDeleted { get; set; }
+
+    // 追蹤每個檔案獨立狀態的內部 class
+    private class FileUploadState
+    {
+        public IBrowserFile File { get; set; } = null!;
+        public int Progress { get; set; }
+        public string Status { get; set; } = "等待中";
+        public bool IsUploading { get; set; }
+        public CancellationTokenSource? Cts { get; set; }
+        public string ProgressBarClass => Status == "完成" ? "bg-success" : (Status.Contains("失敗") ? "bg-danger" : "progress-bar-striped progress-bar-animated");
+    }
+
+    private List<FileUploadState> fileList = new();
+    private List<string> existingFiles = new();
+    private bool _isDragOver;
+    private bool isUploading;
+    private long totalSize => fileList.Sum(f => f.File.Size);
+    private string uploadProgress = "0%";
+
+    // 供父元件呼叫以顯示此 Modal 的方法
+    public async Task Show(string targetPath) // [修改] 改為 async Task
+    {
+        TargetUploadPath = targetPath;
+        // [新增] 清空上一次的狀態
+        fileList.Clear();
+        existingFiles.Clear();
+        isUploading = false;
+        uploadProgress = "0%";
+
+        await JSRuntime.InvokeVoidAsync("showBootstrapModal", "fileUploadModal");
+
+        // [新增] 載入已存在的檔案清單
+        LoadExistingFiles();
+        StateHasChanged();
+    }
+
+    // 供父元件呼叫以關閉此 Modal 的方法
+    public async Task Close()
+    {
+        fileList.Clear();
+        existingFiles.Clear(); // [新增] 關閉時也清除已存在檔案列表
+        isUploading = false;
+        await JSRuntime.InvokeVoidAsync("hideBootstrapModal", "fileUploadModal");
+    }
+
+    // [新增] 載入目標路徑下已存在的檔案
+    private void LoadExistingFiles()
+    {
+        try
+        {
+            if (Directory.Exists(TargetUploadPath))
+            {
+                existingFiles = Directory.GetFiles(TargetUploadPath)
+                                         .Select(Path.GetFileName)
+                                         .Where(f => f != null)
+                                         .ToList()!;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "讀取已存在檔案失敗，路徑: {path}", TargetUploadPath);
+            // 可在此處加入錯誤訊息提示
+        }
+    }
+
+    // [新增] 刪除指定檔案的邏輯
+    private async Task DeleteFile(string fileNameToDelete)
+    {
+        var fullPath = Path.Combine(TargetUploadPath, fileNameToDelete);
+        try
+        {
+            if (File.Exists(fullPath))
+            {
+                File.Delete(fullPath);
+                existingFiles.Remove(fileNameToDelete); // 從UI列表中移除
+                await OnFileDeleted.InvokeAsync(fileNameToDelete); // 通知父元件
+                StateHasChanged(); // 更新畫面
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "刪除檔案 {fileName} 失敗", fileNameToDelete);
+            // 可在此處加入錯誤訊息提示
+            await JSRuntime.InvokeVoidAsync("alert", $"刪除檔案 '{fileNameToDelete}' 失敗: {ex.Message}");
+        }
+    }
+
+    // InputFile 元件的 OnChange 事件處理器
+    private void LoadFiles(InputFileChangeEventArgs e)
+    {
+        foreach (var file in e.GetMultipleFiles())
+        {
+            if (!fileList.Any(f => f.File.Name == file.Name))
+            {
+                fileList.Add(new FileUploadState { File = file });
+            }
+        }
+        _isDragOver = false;
+    }
+
+    // 核心上傳邏輯
+    private async Task UploadAllFiles()
+    {
+        isUploading = true;
+        long totalUploadedBytes = 0;
+        long totalBytesToUpload = totalSize;
+        int completedFiles = 0;
+        // 用於儲存成功上傳的檔案名稱
+        var successfullyUploadedFiles = new List<string>();
+
+        foreach (var fileState in fileList)
+        {
+            fileState.IsUploading = true;
+            fileState.Status = "上傳中...";
+            fileState.Cts = new CancellationTokenSource();
+
+            try
+            {
+                var safeFileName = Path.GetFileName(fileState.File.Name);
+                var path = Path.Combine(TargetUploadPath, safeFileName);
+                Directory.CreateDirectory(TargetUploadPath);
+                await using var fs = new FileStream(path, FileMode.Create);
+                using var stream = fileState.File.OpenReadStream(maxAllowedSize: 524288000); // 限制500MB
+
+                var buffer = new byte[4 * 1024]; // 4KB buffer
+                int bytesRead;
+                long totalBytesRead = 0;
+
+                while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, fileState.Cts.Token)) > 0)
+                {
+                    await fs.WriteAsync(buffer, 0, bytesRead, fileState.Cts.Token);
+                    totalBytesRead += bytesRead;
+                    totalUploadedBytes += bytesRead;
+
+                    fileState.Progress = (int)((double)totalBytesRead / fileState.File.Size * 100);
+                    uploadProgress = $"{(int)((double)totalUploadedBytes / totalBytesToUpload * 100)}%";
+                    StateHasChanged();
+                    await Task.Delay(1);
+                }
+
+                fileState.Progress = 100;
+                fileState.Status = "完成";
+                successfullyUploadedFiles.Add(safeFileName);
+                completedFiles++;
+            }
+            catch (OperationCanceledException)
+            {
+                fileState.Status = "已取消";
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "上傳檔案 {FileName} 至 {TargetPath} 失敗", fileState.File.Name, TargetUploadPath);
+                Console.WriteLine($"上傳檔案 {fileState.File.Name} 失敗: {ex.Message}");
+                fileState.Status = "失敗";
+            }
+            finally
+            {
+                fileState.IsUploading = false;
+                fileState.Cts?.Dispose();
+                fileState.Cts = null;
+            }
+        }
+        isUploading = false;
+        uploadProgress = $"{completedFiles}/{fileList.Count} 完成";
+
+        // [新增] 上傳完成後，清空待上傳列表並重新載入資料夾中的檔案
+        fileList.Clear();
+        LoadExistingFiles();
+        StateHasChanged();
+
+        await OnUploadsCompleted.InvokeAsync(successfullyUploadedFiles);
+    }
+
+    // 格式化檔案大小顯示
+    private string FormatBytes(long bytes)
+    {
+        string[] suffixes = { "B", "KB", "MB", "GB", "TB" };
+        int i = 0;
+        double dblSByte = bytes;
+        while (dblSByte >= 1024 && i < suffixes.Length - 1)
+        {
+            dblSByte /= 1024;
+            i++;
+        }
+        return $"{dblSByte:0.##} {suffixes[i]}";
+    }
+
+    #region Drag and Drop Handlers
+    private void HandleDragEnter() => _isDragOver = true;
+    private void HandleDragLeave() => _isDragOver = false;
+    private void HandleDragOver(DragEventArgs e)
+    {
+        _isDragOver = true;
+        e.DataTransfer.DropEffect = "copy";
+    }
+    private void HandleDrop(DragEventArgs e) => _isDragOver = false;
+    #endregion
+}
