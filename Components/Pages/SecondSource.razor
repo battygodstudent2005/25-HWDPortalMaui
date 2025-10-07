@@ -1,0 +1,94 @@
+﻿@page "/SecondSource"
+
+@* 篩選條件區塊 *@
+<div class="row mb-3 g-2">
+    <div class="col-lg-12">
+        <div class="card shadow-sm h-100">
+            <div class="card-header py-2">
+                <i class="bi bi-funnel-fill me-2"></i>篩選條件
+            </div>
+            <div class="card-body py-2">
+                <div class="row g-2">
+                    @* 年份選擇 *@
+                    <div class="col-md-3">
+                        <label for="year-select" class="form-label mb-1 small">選擇年份：</label>
+                        <select id="year-select" class="form-select form-select-sm" @bind="SelectedYear">
+                            @if (YearList.Any())
+                            {
+                                @foreach (var year in YearList)
+                                {
+                                    <option value="@year">@year</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                    @* 元件種類選擇 *@
+                    <div class="col-md-3">
+                        <label for="component-type-select" class="form-label mb-1 small">選擇元件種類：</label>
+                        <select id="component-type-select" class="form-select form-select-sm" @bind="SelectedComponentType">
+                            @if (ComponentTypeList.Any())
+                            {
+                                @foreach (var componentType in ComponentTypeList)
+                                {
+                                    <option value="@componentType">@componentType</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* 主要內容顯示區 (空殼) *@
+<div class="row">
+    <div class="col-lg-12">
+        <div class="card shadow-sm">
+            <div class="card-header">
+                <i class="bi bi-card-list me-2"></i>替代料資訊
+            </div>
+            <div class="card-body" style="min-height: 500px;">
+                @* 之後的資料表格或內容將會放在這裡 *@
+                <div class="text-center p-5">
+                    <i class="bi bi-inbox text-muted" style="font-size: 3rem;"></i>
+                    <p class="mt-2 text-muted">請選擇篩選條件以顯示資料。</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+@code {
+    [CascadingParameter]
+    public MainLayout? Layout { get; set; }
+
+    // 年份列表
+    private List<int> YearList { get; set; } = new List<int>();
+    private int SelectedYear { get; set; }
+
+    // 元件種類列表
+    private List<string> ComponentTypeList { get; set; } = new List<string> { "ALL", "IC", "MOS" };
+    private string? SelectedComponentType { get; set; }
+
+    protected override void OnInitialized()
+    {
+        // 設定頁面標題
+        Layout?.SetPageTitle("替代料 (Second Source)");
+
+        // 初始化年份列表 (yyyy-2 ~ yyyy+1)
+        int currentYear = DateTime.Now.Year;
+        int startYear = currentYear + 1;
+        int endYear = currentYear - 2;
+
+        for (int year = startYear; year >= endYear; year--)
+        {
+            YearList.Add(year);
+        }
+
+        // 設定預設篩選值
+        SelectedYear = currentYear;
+        SelectedComponentType = ComponentTypeList.FirstOrDefault();
+    }
+}
