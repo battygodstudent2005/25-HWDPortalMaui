@@ -1,4 +1,5 @@
 ﻿@page "/Bulletin"
+@using Microsoft.Maui.ApplicationModel
 @using System.IO
 @using HWDPortalMaui.Services
 @using HWDPortalMaui.Components.Layout
@@ -82,10 +83,10 @@ else
                     @* 迭代的對象從 bulletins 改為 filteredBulletins *@
                     @foreach (var item in filteredBulletins)
                     {
+                        // [修改] 移除 <tr> 上的 @onclick 和 style 屬性
                         <tr>
                             <td>
-                                @* 下載連結建議傳遞 Id 至後端 API 處理，由後端根據 Id 查詢 FileFullPath 並回傳檔案流，這樣更安全 *@
-                                <a href="@($"/download/bulletinfile?id={item.Id}")" target="_blank">
+                                <a href="#" @onclick="() => OpenFile(item)" @onclick:preventDefault>
                                     @item.Document
                                 </a>
                             </td>
@@ -244,7 +245,48 @@ else
             }
         }
     }
+    // 處理點擊公告列並開啟檔案的方法
+    private async Task OpenFile(BulletinItem item)
+    {
+        // 取得公告項目的完整檔案路徑
+        var filePath = item.FileFullPath;
 
+        // 檢查路徑是否為空或空白
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            // 使用 JSRuntime 彈出警告，因為此頁面已注入 IJSRuntime
+            await JSRuntime.InvokeVoidAsync("alert", "此公告沒有關聯的檔案路徑。");
+            return;
+        }
+
+        // 檢查檔案是否存在
+        if (!File.Exists(filePath))
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"檔案不存在於指定路徑: {filePath}");
+            return;
+        }
+
+        try
+        {
+            // 使用 MAUI 的 Launcher 功能，請求作業系統用預設應用程式開啟檔案
+            var openResult = await Launcher.Default.OpenAsync(new OpenFileRequest
+            {
+                File = new ReadOnlyFile(filePath)
+            });
+
+            // 如果作業系統回傳 false，表示無法開啟
+            if (!openResult)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "無法開啟檔案，您的裝置上可能沒有安裝對應的應用程式。");
+            }
+        }
+        catch (Exception ex)
+        {
+            // 捕捉並記錄錯誤，同時通知使用者
+            Logger.LogError(ex, $"開啟檔案 {filePath} 時發生錯誤。");
+            await JSRuntime.InvokeVoidAsync("alert", $"開啟檔案時發生預期外的錯誤: {ex.Message}");
+        }
+    }
     protected override async Task OnInitializedAsync()
     {
         // 在頁面初始化時，透過 Layout 物件呼叫其公開方法來設定標題
