@@ -1,0 +1,88 @@
+﻿@* NavMenu.razor - 左側導覽列元件 *@
+
+@* 1. 修改 navbar-brand: 加入 d-flex align-items-center 讓圖示與文字垂直置中 *@
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand d-flex align-items-center" href="">
+            <i class="bi bi-house-door-fill me-2 nav-icon"></i>
+            <span>HWD Portal</span> @* [新增] 將品牌文字包裹在 span 中，以便 CSS 控制顯示/隱藏 *@
+        </a>
+    </div>
+</div>
+
+<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <nav class="flex-column">
+        @* 1. Bulletin (公告欄) 連結 *@
+        <div class="nav-item px-3">
+            <NavLink class="nav-link d-flex align-items-center" href="bulletin">
+                <i class="bi bi-megaphone-fill nav-icon me-3" aria-hidden="true"></i>
+                <span>Bulletin</span>
+            </NavLink>
+        </div>
+
+        @* 2. Dashboard (儀表板) 連結 *@
+        <div class="nav-item px-3">
+            <NavLink class="nav-link d-flex align-items-center" href="dashboard">
+                <i class="bi bi-calendar3 nav-icon me-3" aria-hidden="true"></i>
+                <span>Dashboard</span>
+            </NavLink>
+        </div>
+
+        @* 3. Second Source (第二來源) 連結 *@
+        <div class="nav-item px-3">
+            <NavLink class="nav-link d-flex align-items-center" href="secondsource">
+                <i class="bi bi-cpu-fill nav-icon me-3" aria-hidden="true"></i>
+                <span>Second Source</span>
+            </NavLink>
+        </div>
+
+        @* 4. Document (文件) 連結 *@
+        <div class="nav-item px-3">
+            <NavLink class="nav-link d-flex align-items-center" href="document">
+                <i class="bi bi-file-earmark-text-fill nav-icon me-3" aria-hidden="true"></i>
+                <span>Document</span>
+            </NavLink>
+        </div>
+
+        @* 5. Automation (自動化) 連結 *@
+        <div class="nav-item px-3">
+            <NavLink class="nav-link d-flex align-items-center" href="automation">
+                <i class="bi bi-gear-fill nav-icon me-3" aria-hidden="true"></i>
+                <span>Automation</span>
+            </NavLink>
+        </div>
+
+        @* 6. AI Assistant (AI 助理) 連結 *@
+        <div class="nav-item px-3">
+            <NavLink class="nav-link d-flex align-items-center" href="ai_assistant">
+                <i class="bi bi-robot nav-icon me-3" aria-hidden="true"></i>
+                <span>AI Assistant</span>
+            </NavLink>
+        </div>
+    </nav>
+</div>
+
+<style>
+    /* 導覽圖示樣式 */
+    .nav-icon {
+        font-size: 1.2rem;
+        width: 1.5rem;
+        text-align: center;
+        flex-shrink: 0;
+        /* 2. 修改CSS: 加入 line-height: 1 可幫助移除圖示字型多餘的上下空間，讓對齊更精準 */
+        line-height: 1;
+    }
+
+    /* 導覽連結樣式優化 */
+    .nav-link {
+        padding: 0.75rem 1rem !important;
+        min-height: 2.5rem;
+    }
+
+    /* 品牌區域圖示 */
+    .navbar-brand .nav-icon {
+        font-size: 1.3rem;
+    }
+</style>

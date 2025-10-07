@@ -1,0 +1,97 @@
+# 忽略所有由 IDE (Visual Studio, VS Code, Rider) 或作業系統產生的使用者特定檔案。
+# =========================================================================================
+
+## Visual Studio
+# 使用者特定的設定檔，例如偵錯設定、開啟的檔案等。
+*.user
+*.userosscache
+*.suo
+.vs/
+
+# JetBrains Rider
+.idea/
+
+# VS Code
+.vscode/
+
+## macOS / Mac OS X
+# 系統檔案
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# 縮圖快取
+._*
+
+# 垃圾桶
+.Trashes
+
+
+# 忽略建置輸出、暫存檔和套件。
+# ========================================================
+
+# 建置輸出目錄
+bin/
+obj/
+
+# 發布目錄
+[Rr]elease/
+[Dd]ebug/
+[Bb]uild/
+[Bb]uilds/
+
+# NuGet 套件目錄 (較舊的專案格式)
+packages/
+*.nupkg
+*.snupkg
+
+# MSBuild 專案快取
+.msbuild.cache
+
+
+# 忽略與特定專案類型相關的檔案。
+# ======================================
+
+# 測試報告
+*.trx
+TestResults/
+
+# Web 專案的 publish profiles
+*.pubxml
+*.publish.xml
+
+# .NET MAUI 平台特定檔案
+# 這些目錄會在建置過程中重新產生
+Platforms/Android/bin/
+Platforms/Android/obj/
+Platforms/iOS/bin/
+Platforms/iOS/obj/
+Platforms/MacCatalyst/bin/
+Platforms/MacCatalyst/obj/
+Platforms/Tizen/bin/
+Platforms/Tizen/obj/
+Platforms/Windows/bin/
+Platforms/Windows/obj/
+
+
+# 忽略其他雜項檔案。
+# ========================
+
+# 記錄檔
+*.log
+*.txt
+
+# 程式碼涵蓋率報告
+*.coverage
+*.coveragexml
+
+# 效能分析檔案
+*.vsp
+*.vspx
+*.sap
+
+
+# [新增] 應用程式設定檔，避免提交 API 金鑰、連接字串等機密資訊。
+# =======================================================================
+appsettings.json
+appsettings.Development.json

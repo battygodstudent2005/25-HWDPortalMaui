@@ -1,0 +1,375 @@
+﻿@page "/Bulletin"
+@using System.IO
+@using HWDPortalMaui.Services
+@using HWDPortalMaui.Components.Layout
+@using System.Text
+@using Microsoft.Extensions.Logging
+@inject BulletinService BulletinSvc
+@inject UserInfoService _userInfoService
+@inject ILogger<Bulletin> Logger
+@inject IJSRuntime JSRuntime
+
+
+<PageTitle>公告欄</PageTitle>
+
+
+@* 將搜尋框與資訊區塊整合在同一個卡片(card)中，使其水平並排 *@
+<div class="card shadow-sm mb-3">
+    <div class="card-body py-2">
+        <div class="row align-items-center">
+            @* 將搜尋框移入此區塊，並佔據 8 個欄位的寬度 *@
+            <div class="col-md-8">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control" placeholder="依公告標題搜尋..."
+                           @bind="SearchTerm" @bind:event="oninput" />
+                    @if (!string.IsNullOrWhiteSpace(SearchTerm))
+                    {
+                        <button class="btn btn-outline-secondary" @onclick="ClearSearch">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @* 此區塊佔據 4 個欄位的寬度，並使用 d-flex justify-content-end 確保內容靠右對齊 *@
+            <div class="col-md-4">
+                <div class="d-flex justify-content-end align-items-center">
+                    @if (IsAdmin)
+                    {
+                        <button class="btn btn-primary btn-sm me-3" @onclick="OpenManageModal">管理</button>
+                    }
+                    <small class="text-muted">
+                        顯示 @(filteredBulletins?.Count ?? 0) / @(bulletins?.Count ?? 0) 則公告
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <p><em>載入公告中...</em></p>
+}
+else if (bulletins == null || !bulletins.Any())
+{
+    <p><em>目前沒有任何公告。</em></p>
+}
+@* 當有公告但搜尋無結果時顯示的訊息 *@
+else if (filteredBulletins == null || !filteredBulletins.Any())
+{
+    <div class="text-center p-4">
+        <i class="bi bi-search-heart text-muted" style="font-size: 3rem;"></i>
+        @* 將變數 searchTerm 修改為 SearchTerm 屬性 *@
+        <p class="mt-2 text-muted">找不到符合「@SearchTerm」的公告。</p>
+    </div>
+}
+else
+{
+    @* 將表格放入卡片中，並使用 table-responsive，樣式與 Dashboard 更統一 *@
+    <div class="card shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-striped mb-0">
+                <thead class="thead-dark">
+                    <tr>
+                        <th style="width: 50%;">公告標題</th>
+                        <th style="width: 20%;">部門</th>
+                        <th style="width: 30%;">發佈日期</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @* 迭代的對象從 bulletins 改為 filteredBulletins *@
+                    @foreach (var item in filteredBulletins)
+                    {
+                        <tr>
+                            <td>
+                                @* 下載連結建議傳遞 Id 至後端 API 處理，由後端根據 Id 查詢 FileFullPath 並回傳檔案流，這樣更安全 *@
+                                <a href="@($"/download/bulletinfile?id={item.Id}")" target="_blank">
+                                    @item.Document
+                                </a>
+                            </td>
+                            <td>@item.Department</td>
+                            <td>@item.UploadTime?.ToString("yyyy/MM/dd HH:mm:ss")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+@* 管理公告的 Modal *@
+@if (showManageModal)
+{
+    <div class="modal fade show" tabindex="-1" style="display: block;" role="dialog">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">公告管理</h5>
+                    <button type="button" class="btn-close" @onclick="CloseManageModal"></button>
+                </div>
+                <div class="modal-body">
+
+                    @* 上傳區塊，支援多檔案選擇 *@
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            上傳新公告
+                        </div>
+                        <div class="card-body">
+                            @* 狀態訊息區塊現在可以顯示多行 HTML *@
+                            @if (!string.IsNullOrEmpty(uploadStatusMessage))
+                            {
+                                <div class="alert @(isUploadSuccess ? "alert-success" : "alert-danger")" role="alert">
+                                    @((MarkupString)uploadStatusMessage)
+                                </div>
+                            }
+                            <div class="input-group">
+                                <span class="input-group-text">部門</span>
+                                <select class="form-select" @bind="newBulletinDepartment">
+                                    <option value="HW">HW</option>
+                                    <option value="PWR">PWR</option>
+                                </select>
+                                @* 在 InputFile 元件上加上 multiple 屬性以允許多選 *@
+                                <InputFile class="form-control" OnChange="HandleFileSelected" multiple />
+                                @* 按鈕的 disabled 條件改為檢查 selectedFiles 列表是否為空 *@
+                                <button class="btn btn-success" @onclick="UploadFile" disabled="@(isUploading || !selectedFiles.Any())">
+                                    @if (isUploading)
+                                    {
+                                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                        <span> 上傳中...</span>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-upload"></i>
+                                        <span> 上傳</span>
+                                    }
+                                </button>
+                            </div>
+                            @* 顯示所有已選擇的檔案列表 *@
+                            @if (selectedFiles.Any())
+                            {
+                                <div class="mt-2 text-muted small">
+                                    <p class="mb-1">已選擇 @selectedFiles.Count 個檔案:</p>
+                                    <ul class="list-unstyled mb-0">
+                                        @foreach (var file in selectedFiles)
+                                        {
+                                            <li>- @file.Name (@((file.Size / 1024).ToString("N0")) KB)</li>
+                                        }
+                                    </ul>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    @* 現有公告列表與刪除 *@
+                    <h6>現有公告</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>檔案名稱</th>
+                                    <th>部門</th>
+                                    <th>上傳時間</th>
+                                    <th class="text-end">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (bulletins == null || !bulletins.Any())
+                                {
+                                    <tr><td colspan="4" class="text-center">目前沒有公告</td></tr>
+                                }
+                                else
+                                {
+                                    @foreach (var item in bulletins)
+                                    {
+                                        <tr>
+                                            <td>@item.Document</td>
+                                            <td>@item.Department</td>
+                                            <td>@item.UploadTime?.ToString("yyyy/MM/dd HH:mm")</td>
+                                            <td class="text-end">
+                                                <button class="btn btn-outline-danger btn-sm" @onclick="() => DeleteBulletin(item.Id)">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseManageModal">關閉</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+
+@code {
+    [CascadingParameter] // 宣告一個屬性來接收從上層 MainLayout 傳來的串聯參數
+    public MainLayout? Layout { get; set; }
+
+    // 定義一個唯讀的管理員清單 (使用 HashSet 效能較佳)
+    private readonly HashSet<string> AdminList = new() { "Chain_Liu", "Yosna_Hsieh", "HankC_Huang", "Sonia_Tsai" };
+
+    // 新增一個布林屬性，用來判斷目前使用者是否在 AdminList 中
+    private bool IsAdmin => _userInfoService != null && !string.IsNullOrEmpty(_userInfoService.UserName) && AdminList.Contains(_userInfoService.UserName);
+
+    private List<BulletinItem>? bulletins;
+    private List<BulletinItem>? filteredBulletins;
+    private bool isLoading = true;
+    private string _searchTerm = "";
+
+    // Modal 相關狀態
+    private bool showManageModal = false;
+    private bool isUploading = false;
+    private string newBulletinDepartment = "PWR"; // 預設部門
+    private List<IBrowserFile> selectedFiles = new(); // 改用 List 來儲存多個檔案
+    private string? uploadStatusMessage;
+    private bool isUploadSuccess;
+
+    private string SearchTerm
+    {
+        get => _searchTerm;
+        set
+        {
+            // 只有當值真的改變時才更新，避免不必要的重複篩選
+            if (_searchTerm != value)
+            {
+                _searchTerm = value;
+                FilterBulletins(); // 當 SearchTerm 被賦值時，自動呼叫篩選方法
+            }
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // 在頁面初始化時，透過 Layout 物件呼叫其公開方法來設定標題
+        Layout?.SetPageTitle("公告欄 (Bulletin)");
+        await LoadBulletins(); // 將載入邏輯抽成獨立方法
+    }
+
+    // 將載入邏輯抽離，方便重複使用
+    private async Task LoadBulletins(bool forceReload = false)
+    {
+        try
+        {
+            isLoading = true;
+            StateHasChanged(); // 通知 UI 更新 isLoading 狀態
+            bulletins = await BulletinSvc.GetBulletinsAsync(forceReload);
+            // 直接呼叫篩選方法，不再手動建立 ChangeEventArgs
+            FilterBulletins();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "獲取公告時發生錯誤。");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged(); // 通知 UI 更新
+        }
+    }
+
+    // Modal 的控制方法
+    private void OpenManageModal() => showManageModal = true;
+    private void CloseManageModal() => showManageModal = false;
+
+    // 處理多檔案選擇事件
+    private void HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        // 呼叫 GetMultipleFiles 時傳入一個較大的數字 (例如 100) 來覆寫預設的 10 個檔案限制
+        selectedFiles = e.GetMultipleFiles(100).ToList();
+        uploadStatusMessage = null; // 清除之前的上傳狀態訊息
+    }
+
+    // 處理多檔案上傳邏輯
+    private async Task UploadFile()
+    {
+        if (!selectedFiles.Any()) return;
+
+        isUploading = true;
+        uploadStatusMessage = null;
+        var uploadResults = new StringBuilder(); // 用於建立上傳結果報告
+        var successfulUploads = 0;
+
+        StateHasChanged();
+
+        // 遍歷所有已選擇的檔案並逐一上傳
+        foreach (var file in selectedFiles)
+        {
+            try
+            {
+                await BulletinSvc.UploadBulletinAsync(newBulletinDepartment, file);
+                uploadResults.AppendLine($"檔案 <b>{file.Name}</b> 上傳成功。<br/>");
+                successfulUploads++;
+            }
+            catch (Exception ex)
+            {
+                uploadResults.AppendLine($"檔案 <b>{file.Name}</b> 上傳失敗: {ex.Message}<br/>");
+                Logger.LogError(ex, $"檔案 {file.Name} 上傳失敗");
+            }
+        }
+
+        isUploadSuccess = successfulUploads == selectedFiles.Count; // 只有全部成功才算成功
+        uploadStatusMessage = uploadResults.ToString();
+        selectedFiles.Clear(); // 清空已選擇的檔案列表
+
+        // 如果至少有一個檔案上傳成功，就重新整理列表
+        if (successfulUploads > 0)
+        {
+            await LoadBulletins(forceReload: true);
+        }
+
+        isUploading = false;
+        StateHasChanged();
+    }
+
+    // 處理刪除邏輯
+    private async Task DeleteBulletin(int id)
+    {
+        // 使用 JSRuntime 彈出確認對話框
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "您確定要刪除這則公告嗎？此操作無法復原！");
+        if (confirmed)
+        {
+            try
+            {
+                await BulletinSvc.DeleteBulletinAsync(id);
+                await LoadBulletins(forceReload: true); // 強制重新載入列表
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, $"刪除公告 (Id: {id}) 時發生錯誤。");
+                // 可以在這裡顯示一個錯誤訊息給使用者
+                await JSRuntime.InvokeVoidAsync("alert", "刪除失敗，請查看日誌檔。");
+            }
+        }
+    }
+
+    // 建立一個不依賴事件參數的篩選方法
+    private void FilterBulletins()
+    {
+        // 篩選邏輯現在基於 SearchTerm 屬性
+        if (string.IsNullOrWhiteSpace(SearchTerm))
+        {
+            // 如果搜尋詞為空，則顯示所有公告
+            filteredBulletins = bulletins;
+        }
+        else
+        {
+            // 篩選邏輯不變，但來源是 SearchTerm
+            filteredBulletins = bulletins?.Where(b => b.Document != null && b.Document.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+    }
+
+    // 清除搜尋條件的方法
+    private void ClearSearch()
+    {
+        // 透過設定屬性來清空搜尋詞並自動觸發篩選
+        SearchTerm = "";
+    }
+}
