@@ -4,9 +4,9 @@ using Microsoft.AspNetCore.Components.Forms;
 using Dapper;
 using Microsoft.Data.SqlClient;
 using System.IO;
-using Microsoft.Extensions.Configuration; // [新增] 引用 Configuration 命名空間
-using Microsoft.Extensions.Logging;       // [新增] 引用 Logging 命名空間
-using Microsoft.Maui.Storage;             // [新增] 引用 MAUI 檔案系統 API
+using Microsoft.Extensions.Configuration; // 引用 Configuration 命名空間
+using Microsoft.Extensions.Logging;       // 引用 Logging 命名空間
+using Microsoft.Maui.Storage;             // 引用 MAUI 檔案系統 API
 
 namespace HWDPortalMaui.Services
 {
@@ -81,7 +81,7 @@ namespace HWDPortalMaui.Services
             }
         }
 
-        // [新增] 紀錄檔案操作 (上傳/刪除) 的私有方法
+        // 紀錄檔案操作 (上傳/刪除) 的私有方法
         private async Task LogActionAsync(string actionType, BulletinItem item, string? physicalFileName)
         {
             try
@@ -96,19 +96,19 @@ namespace HWDPortalMaui.Services
 
                 await connection.ExecuteAsync(sql, new
                 {
-                    Division = _userInfoService.UserDivision, // [新增] 從 UserInfoService 取得 Division
-                    item.Department, // [新增] 從傳入的 item 取得部門
-                    _userInfoService.UserName, // [新增] 從 UserInfoService 取得使用者名稱
-                    item.Document, // [新增] 原始文件名稱
-                    ActionType = actionType, // [新增] 操作類型 ('Upload' 或 'Delete')
-                    FileName = physicalFileName, // [新增] 伺服器上的實際檔案路徑
-                    ActionTime = DateTime.Now // [新增] 當前時間
+                    Division = _userInfoService.UserDivision, // 從 UserInfoService 取得 Division
+                    item.Department, // 從傳入的 item 取得部門
+                    _userInfoService.UserName, // 從 UserInfoService 取得使用者名稱
+                    item.Document, // 原始文件名稱
+                    ActionType = actionType, // 操作類型 ('Upload' 或 'Delete')
+                    FileName = physicalFileName, // 伺服器上的實際檔案路徑
+                    ActionTime = DateTime.Now // 當前時間
                 });
                 _logger.LogInformation($"已成功紀錄操作: {actionType}, 使用者: {_userInfoService.UserName}, 檔案: {item.Document}");
             }
             catch (Exception ex)
             {
-                // [新增] 紀錄日誌失敗不應影響主要操作，所以只記錄錯誤訊息
+                // 紀錄日誌失敗不應影響主要操作，所以只記錄錯誤訊息
                 _logger.LogError(ex, "紀錄檔案操作時發生錯誤。");
             }
         }
@@ -158,9 +158,9 @@ namespace HWDPortalMaui.Services
 
                 _logger.LogInformation($"檔案 {file.Name} 的資料庫紀錄新增成功。");
 
-                // [新增] 建立一個 BulletinItem 物件來傳遞給紀錄方法
+                // 建立一個 BulletinItem 物件來傳遞給紀錄方法
                 var uploadedItem = new BulletinItem { Department = department, Document = file.Name };
-                // [新增] 呼叫紀錄方法
+                // 呼叫紀錄方法
                 await LogActionAsync("Upload", uploadedItem, fullPath);
 
                 // 操作成功後，清除快取，以便下次取得最新資料
@@ -197,7 +197,7 @@ namespace HWDPortalMaui.Services
                 _logger.LogWarning($"嘗試刪除一個不存在的公告紀錄 (Id: {id})。");
                 return; // [修改] 如果紀錄不存在，直接返回，不執行後續操作
             }
-            // [新增] 步驟 2: 在刪除前先記錄操作
+            // 步驟 2: 在刪除前先記錄操作
             await LogActionAsync("Delete", bulletinToDelete, bulletinToDelete.FileFullPath);
 
 
@@ -237,7 +237,7 @@ namespace HWDPortalMaui.Services
         }
         // 此方法已完全重寫，從檔案系統邏輯改為資料庫查詢邏輯
 
-        // [新增] 根據 Id 取得單一筆公告的資訊
+        // 根據 Id 取得單一筆公告的資訊
         public async Task<BulletinItem?> GetBulletinByIdAsync(int id)
         {
             try
