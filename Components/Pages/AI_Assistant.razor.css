@@ -1,0 +1,421 @@
+﻿/* AI_Assistant.razor.css */
+
+.ai-assistant-container {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 120px); /* 減去 header/footer 的高度 */
+    max-width: 900px;
+    margin: 20px auto;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.chat-history {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 20px;
+    background-color: #f9f9f9;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.chat-message {
+    padding: 10px 15px;
+    border-radius: 18px;
+    max-width: 80%;
+    line-height: 1.5;
+}
+
+.user-message {
+    background-color: #007bff;
+    color: white;
+    align-self: flex-end;
+    border-bottom-right-radius: 4px;
+}
+
+.ai-message {
+    background-color: #e9ecef;
+    color: #333;
+    align-self: flex-start;
+    border-bottom-left-radius: 4px;
+}
+
+.message-author {
+    font-weight: bold;
+    margin-bottom: 5px;
+    font-size: 0.9em;
+}
+
+.chat-input-area {
+    padding: 15px;
+    border-top: 1px solid #ccc;
+    background-color: #fff;
+    display: flex;
+    flex-direction: column;
+}
+
+.button-group-top {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+    .button-group-top button {
+        padding: 5px 12px;
+        border-radius: 5px;
+        border: 1px solid #ccc;
+        cursor: pointer;
+        background-color: #f1f1f1;
+    }
+
+        .button-group-top button:hover {
+            background-color: #e2e2e2;
+        }
+
+.btn-send:disabled {
+    background-color: #aaa;
+    cursor: not-allowed;
+}
+
+.btn-send:hover:not(:disabled) {
+    background-color: #218838;
+}
+
+/* 思考中動畫 */
+.dot {
+    display: inline-block;
+    animation: blink 1.4s infinite both;
+}
+
+    .dot:nth-child(2) {
+        animation-delay: .2s;
+    }
+
+    .dot:nth-child(3) {
+        animation-delay: .4s;
+    }
+
+.input-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+}
+
+.chat-textarea {
+    flex-grow: 1;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    resize: vertical;
+    min-height: 40px;
+    font-size: 1rem;
+}
+
+.btn-send {
+    padding: 10px 20px;
+    border: none;
+    background-color: #28a745;
+    color: white;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    white-space: nowrap;
+}
+
+@keyframes blink {
+    0% {
+        opacity: .2;
+    }
+
+    20% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: .2;
+    }
+}
+
+/* 助理設定 Modal 樣式 */
+.settings-modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1050;
+}
+
+.settings-modal-content {
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+    width: 90%;
+    max-width: 1000px;
+    display: flex;
+    flex-direction: column;
+    max-height: 90vh;
+}
+
+.settings-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    border-bottom: 1px solid #dee2e6;
+}
+
+    .settings-modal-header h3 {
+        margin: 0;
+    }
+
+.btn-close {
+    border: none;
+    background: transparent;
+    font-size: 1.5rem;
+    cursor: pointer;
+}
+
+.settings-modal-body {
+    padding: 1rem;
+    overflow-y: auto;
+    display: flex;
+    gap: 1rem;
+}
+
+.settings-left-panel, .settings-right-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.settings-left-panel {
+    flex: 3;
+}
+
+.settings-right-panel {
+    flex: 2;
+    border-left: 1px solid #dee2e6;
+    padding-left: 1rem;
+}
+
+
+.settings-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+    .settings-group label:not(.switch) {
+        font-weight: bold;
+        min-width: 120px;
+    }
+
+    .settings-group.settings-group-vertical {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+        .settings-group.settings-group-vertical span {
+            font-size: 0.9em;
+            color: #6c757d;
+            margin-bottom: 5px;
+        }
+
+
+.settings-textarea {
+    width: 100%;
+    min-height: 150px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+    padding: 8px;
+    font-family: inherit;
+    resize: vertical;
+}
+
+input[type="range"] {
+    width: 100%;
+}
+
+.file-list-container {
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    padding: 10px;
+    max-height: 300px;
+    overflow-y: auto;
+    flex-grow: 1;
+}
+
+.file-list-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+    .file-list-table th, .file-list-table td {
+        text-align: left;
+        padding: 8px;
+        border-bottom: 1px solid #dee2e6;
+    }
+
+    .file-list-table th {
+        background-color: #f8f9fa;
+    }
+
+.btn-delete-file {
+    background-color: #dc3545;
+    color: white;
+    border: none;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+    .btn-delete-file:hover {
+        background-color: #c82333;
+    }
+
+.form-control {
+    display: block;
+    width: 100%;
+    padding: .375rem .75rem;
+    font-size: 1rem;
+    font-weight: 400;
+    line-height: 1.5;
+    color: #495057;
+    background-color: #fff;
+    background-clip: padding-box;
+    border: 1px solid #ced4da;
+    border-radius: .25rem;
+}
+
+
+.settings-modal-footer {
+    padding: 1rem;
+    border-top: 1px solid #dee2e6;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+    .settings-modal-footer .btn {
+        padding: 8px 16px;
+        border-radius: 5px;
+        cursor: pointer;
+        border: 1px solid transparent;
+    }
+
+.btn-secondary {
+    background-color: #6c757d;
+    color: white;
+    border-color: #6c757d;
+}
+
+.btn-primary {
+    background-color: #007bff;
+    color: white;
+    border-color: #007bff;
+}
+
+/* Toggle Switch 樣式 */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+}
+
+    .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    -webkit-transition: .4s;
+    transition: .4s;
+}
+
+    .slider:before {
+        position: absolute;
+        content: "";
+        height: 18px;
+        width: 18px;
+        left: 3px;
+        bottom: 3px;
+        background-color: white;
+        -webkit-transition: .4s;
+        transition: .4s;
+    }
+
+input:checked + .slider {
+    background-color: #2196F3;
+}
+
+input:focus + .slider {
+    box-shadow: 0 0 1px #2196F3;
+}
+
+input:checked + .slider:before {
+    left: calc(100% - 21px);
+}
+
+.slider.round {
+    border-radius: 24px;
+}
+
+    .slider.round:before {
+        border-radius: 50%;
+    }
+
+.settings-right-panel .panel-title {
+    font-size: 1rem;
+    margin: 0;
+}
+
+/* [新增] 通知訊息列樣式 */
+.notification-bar {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 10px 20px;
+    border-radius: 5px;
+    color: white;
+    z-index: 2000;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    font-weight: bold;
+}
+
+.notification-success {
+    background-color: #28a745; /* 綠色 */
+}
+
+.notification-danger {
+    background-color: #dc3545; /* 紅色 */
+}
+
+.notification-warning {
+    background-color: #ffc107; /* 黃色 */
+    color: #333;
+}
+
+/* [新增] 讓 footer 的按鈕樣式更通用 */
+.settings-modal-footer .btn-danger {
+    background-color: #dc3545;
+    color: white;
+    border-color: #dc3545;
+}
