@@ -2414,21 +2414,24 @@
             Console.WriteLine("ProcessProjectCellUpdates 中止：缺少必要的參數 (projectData, projectName, projectDepartment)。");
             return;
         }
-
-        // Debug: 標記處理流程開始
-        Console.WriteLine($"[DEBUG] --- Starting ProcessProjectCellUpdates for Project: {projectName} ---");
         var updatesToCommit = new List<(string Stage, string Item, string NewValue)>();
         foreach (DataRow row in projectData.Rows)
         {
-            if (projectData.Columns.Contains("Item") && !string.IsNullOrEmpty(row["Item"]?.ToString()))
+            var itemToUpdate = row["Item"]?.ToString()?.Trim();
+            if (string.IsNullOrEmpty(itemToUpdate)) continue;
+
+            var currentCellValue = row[projectName]?.ToString() ?? "";
+            // [新增] 如果儲存格的值包含 "年" 這個關鍵字，就代表它是日期格式
+            // 且不為 "Ready", "Checked", "Approval" 等狀態時
+            // 就將其初始值設定為 "Non-Ready"
+            if (currentCellValue.Contains("年") || currentCellValue.Contains("/"))
             {
                 var stage = projectData.Columns.Contains("Stage") ? row["Stage"]?.ToString() ?? "" : "";
-                var item = row["Item"].ToString()!;
-                var initialValue = "Non-Ready";
-                row[projectName] = initialValue;
-                updatesToCommit.Add((stage, item, initialValue));
+                row[projectName] = "Non-Ready";
+                updatesToCommit.Add((stage, itemToUpdate, "Non-Ready"));
             }
         }
+        
 
         try
         {
@@ -2509,9 +2512,6 @@
 
                 // 檢查儲存格的現有狀態，如果已是 Ready/Checked/Approval 則跳過，不進行更新
                 var currentCellValue = row[projectName]?.ToString() ?? "";
-
-                // 修正 Contains("Ready") 會誤判 "Non-Ready" 的問題。
-                // 先移除星號再進行精確比對，這樣可以同時處理 "Ready" 和 "*Ready" 等情況。
                 var cleanedCellValue = currentCellValue.Replace("*", "").Trim();
                 if (cleanedCellValue.Equals("Ready", StringComparison.OrdinalIgnoreCase) ||
                     cleanedCellValue.Equals("Checked", StringComparison.OrdinalIgnoreCase) ||
@@ -2610,7 +2610,7 @@
                 // 如果找到了，就進行日期計算
                 if (DateTime.TryParse(baseDateString, out DateTime baseDate))
                 {
-                    return baseDate.AddDays(offset).ToString("yyyy/MM/dd");
+                    return baseDate.AddDays(offset).ToString("yyyy年MM月dd日");
                 }
             }
         }
@@ -2623,7 +2623,7 @@
                 // 驗證日期格式是否正確，如果正確才回傳
                 if (DateTime.TryParse(baseDateString, out DateTime baseDate))
                 {
-                    return baseDate.ToString("yyyy/MM/dd");
+                    return baseDate.ToString("yyyy年MM月dd日");
                 }
             }
         }
