@@ -56,7 +56,6 @@
                         break;
                     }
                 }
-
                 if (userRow != null)
                 {
                     UserDivision = userRow[1].ToString();

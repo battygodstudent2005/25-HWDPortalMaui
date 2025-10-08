@@ -1,14 +1,17 @@
 ﻿@using HWDPortalMaui.Services
+@using Microsoft.Maui.ApplicationModel
 @inherits LayoutComponentBase
 @inject UserInfoService UserInfo
 @inject NavigationManager Navigation
+
 
 @* 加入 @if 判斷式，只有在使用者有效或尚未完成初始化時才顯示主要內容 *@
 @if (!UserInfo.IsInitialized)
 {
     // 當使用者資訊服務尚未初始化時，顯示載入中畫面
-    <div class="loading-container">
-        <div class="spinner-border text-primary" role="status">
+    // 增加 d-flex 與相關 class，並設定 style 使其填滿整個可視高度以實現置中
+    <div class="loading-container d-flex flex-column justify-content-center align-items-center" style="height: 100vh;">
+        <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
             <span class="visually-hidden">Loading...</span>
         </div>
         <p class="mt-3 text-muted">正在驗證使用者身份，請稍候...</p>
@@ -20,6 +23,9 @@ else if (UserInfo.IsUserValid)
     <div class="page">
         <div class="sidebar">
             <NavMenu />
+            <div class="sidebar-footer">
+                <span>Version: @AppInfo.Current.VersionString</span>
+            </div>
         </div>
 
         @* 加上 style 屬性以動態控制滾動條 *@
@@ -30,14 +36,14 @@ else if (UserInfo.IsUserValid)
                 <div>
                     <h5 class="mb-0">@_currentPageTitle</h5>
                 </div>
-                @* [修改] 改為使用 UserInfo.IsUserValid 來判斷 *@
+                @* 改為使用 UserInfo.IsUserValid 來判斷 *@
                 @if (UserInfo.IsUserValid && !string.IsNullOrEmpty(UserInfo.UserName))
                 {
-                    // [新增] 當使用者驗證成功時，顯示使用者資訊和選單
+                    // 當使用者驗證成功時，顯示使用者資訊和選單
                     <div class="dropdown">
                         <a href="#" class="d-flex align-items-center text-dark text-decoration-none dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-person-circle me-2" style="font-size: 1.2rem; color: #343a40;"></i>
-                            <span>@UserInfo.UserName</span> @* [新增] 直接從 UserInfo 服務顯示使用者名稱 *@
+                            <span>@UserInfo.UserName</span> @* 直接從 UserInfo 服務顯示使用者名稱 *@
                         </a>
                         <ul class="dropdown-menu text-small shadow">
                             @* 在 MAUI Hybrid 應用中，身份驗證是跟隨 Windows 登入，
@@ -54,7 +60,7 @@ else if (UserInfo.IsUserValid)
                 }
                 else
                 {
-                    // [新增] 當使用者未通過驗證時，顯示此訊息
+                    // 當使用者未通過驗證時，顯示此訊息
                     <span class="user-info">使用者: 未驗證</span>
                 }
             </div>
@@ -66,6 +72,14 @@ else if (UserInfo.IsUserValid)
                 </CascadingValue>
             </article>
         </main>
+    </div>
+}
+else
+{
+    // 當使用者已初始化但驗證失敗時的過渡畫面
+    // 理論上此畫面只會出現一瞬間，因為 OnAfterRenderAsync 中的導航會立即觸發
+    <div class="loading-container">
+        <p class="mt-3 text-muted">驗證失敗，正在重新導向...</p>
     </div>
 }
 
@@ -80,6 +94,9 @@ else if (UserInfo.IsUserValid)
 
 @code {
     private string? _currentPageTitle; // 用於儲存目前頁面標題的私有欄位
+
+    // 一個旗標，確保驗證邏輯只在首次渲染後執行一次
+    private bool _hasPerformedAuthCheck = false;
 
     // 用於儲存 <main> 元素樣式的變數
     private string mainContentStyle = "";
@@ -97,38 +114,38 @@ else if (UserInfo.IsUserValid)
         StateHasChanged();
     }
 
-    // 覆寫 OnInitializedAsync 生命周期方法以包含驗證邏輯
-    protected override async Task OnInitializedAsync()
+    // 使用 OnAfterRenderAsync 來處理啟動時的驗證與導航
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // 在 MAUI Blazor Hybrid 中，直接使用 Environment.UserName 獲取 Windows 登入的使用者名稱
-        var userName = Environment.UserName;
-
-        // 判斷是否成功獲取使用者名稱
-        if (!string.IsNullOrEmpty(userName))
+        // 只在首次渲染後執行，且確保只執行一次
+        if (firstRender && !_hasPerformedAuthCheck)
         {
-            // 偵錯訊息，顯示正在使用的 UserInfoService 實例 ID
-            Console.WriteLine($"[Debug] MainLayout is using UserInfoService with InstanceId: {UserInfo.InstanceId}");
+            _hasPerformedAuthCheck = true; // 將旗標設為 true，防止重複執行
 
-            // 使用獲取到的使用者名稱來初始化使用者資訊服務
-            await UserInfo.InitializeAsync(userName);
-
-            // 檢查使用者資訊服務初始化後，使用者是否有效。如果無效，則導向到拒絕存取頁面
-            if (UserInfo.IsInitialized && !UserInfo.IsUserValid)
+            var userName = Environment.UserName;
+            if (!string.IsNullOrEmpty(userName))
             {
-                // 使用 forceLoad: true 確保是完整的頁面重新導向
-                Navigation.NavigateTo("/access-denied", forceLoad: true);
-                return; // 導向後直接返回，不執行後續的 StateHasChanged
-            }
-        }
-        else
-        {
-            // 如果無法獲取使用者名稱，也導向到拒絕存取頁面
-            Console.WriteLine("[Error] Unable to retrieve username from Environment.UserName.");
-            Navigation.NavigateTo("/access-denied", forceLoad: true);
-            return;
-        }
+                Console.WriteLine($"[Debug] MainLayout is using UserInfoService with InstanceId: {UserInfo.InstanceId}");
+                await UserInfo.InitializeAsync(userName);
 
-        // 確保在驗證成功後才更新 UI
-        StateHasChanged();
+                // 在此處檢查使用者是否有效
+                if (UserInfo.IsInitialized && !UserInfo.IsUserValid)
+                {
+                    // 移除 forceLoad: true，在 Hybrid App 中，標準的客戶端導航更穩定
+                    Navigation.NavigateTo("/access-denied");
+                    return; // 導航後返回
+                }
+            }
+            else
+            {
+                Console.WriteLine("[Error] Unable to retrieve username from Environment.UserName.");
+                Navigation.NavigateTo("/access-denied"); // 移除 forceLoad: true
+                return;
+            }
+
+            // 當驗證流程結束後(無論成功或失敗)，都呼叫 StateHasChanged()
+            // 這會讓 UI 從 "正在驗證..." 的畫面更新為正確的內容或是在導航發生前短暫的空白
+            StateHasChanged();
+        }
     }
 }

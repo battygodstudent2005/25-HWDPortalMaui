@@ -126,3 +126,20 @@ main {
 .top-row .user-info {
     color: #343a40; /* 設定使用者資訊文字為標準深灰色 */
 }
+/* 版本號區塊的樣式 */
+.sidebar-footer {
+    position: absolute; /* 相對於 .sidebar 定位 */
+    bottom: 0;
+    width: 100%;
+    text-align: center;
+    padding: 1rem;
+    color: rgba(255, 255, 255, 0.8); /* 使用半透明白色以搭配深色背景 */
+    font-size: 0.8em;
+    white-space: nowrap; /* 防止文字換行 */
+    overflow: hidden; /* 隱藏溢出的內容 */
+}
+
+/* 當側邊欄收合時(非 hover 狀態)，隱藏版本號區塊 */
+.sidebar:not(:hover) .sidebar-footer {
+    display: none;
+}
