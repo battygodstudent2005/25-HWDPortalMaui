@@ -1,0 +1,66 @@
+﻿@page "/update-available"
+@layout Components.Layout.EmptyLayout
+@inject Services.UpdateService UpdateService
+@inject NavigationManager NavigationManager
+@using Microsoft.AspNetCore.WebUtilities
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card shadow-sm text-center">
+                <div class="card-header bg-info text-white">
+                    <h4 class="mb-0">
+                        <i class="bi bi-cloud-arrow-down-fill me-2"></i> 發現新版本 (New Version Available)
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <p class="card-text fs-5">
+                        偵測到新版本 <strong>@latestVersion</strong> 可供下載。
+                    </p>
+                    <p class="card-text">
+                        您目前使用的版本是 @currentVersion。建議您立即更新以取得最新的功能與安全性修正。
+                    </p>
+                    <div class="d-grid gap-2 d-sm-flex justify-content-sm-center mt-4">
+                        <button class="btn btn-primary btn-lg px-4 gap-3" @onclick="HandleUpdate">
+                            <i class="bi bi-box-arrow-in-down me-2"></i>立即更新
+                        </button>
+                        <button class="btn btn-outline-secondary btn-lg px-4" @onclick="HandleLater">
+                            稍後再說
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string latestVersion = "N/A";
+    private string currentVersion = "N/A";
+
+    protected override void OnInitialized()
+    {
+        // 從 URL 查詢參數中解析版本號碼
+        var uri = NavigationManager.ToAbsoluteUri(NavigationManager.Uri);
+        if (QueryHelpers.ParseQuery(uri.Query).TryGetValue("latestVersion", out var latest))
+        {
+            latestVersion = latest;
+        }
+        if (QueryHelpers.ParseQuery(uri.Query).TryGetValue("currentVersion", out var current))
+        {
+            currentVersion = current;
+        }
+    }
+
+    private async Task HandleUpdate()
+    {
+        // 呼叫 UpdateService 中的方法來執行更新程序
+        await UpdateService.PerformUpdate();
+    }
+
+    private void HandleLater()
+    {
+        // 如果使用者選擇稍後更新，可以將他們導航回主頁
+        NavigationManager.NavigateTo("/");
+    }
+}

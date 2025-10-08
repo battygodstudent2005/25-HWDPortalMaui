@@ -3,6 +3,7 @@
 @inherits LayoutComponentBase
 @inject UserInfoService UserInfo
 @inject NavigationManager Navigation
+@inject HWDPortalMaui.Services.UpdateService UpdateService
 
 
 @* 加入 @if 判斷式，只有在使用者有效或尚未完成初始化時才顯示主要內容 *@
@@ -97,6 +98,7 @@ else
 
     // 一個旗標，確保驗證邏輯只在首次渲染後執行一次
     private bool _hasPerformedAuthCheck = false;
+    private bool _hasPerformedUpdateCheck = false;
 
     // 用於儲存 <main> 元素樣式的變數
     private string mainContentStyle = "";
@@ -117,35 +119,42 @@ else
     // 使用 OnAfterRenderAsync 來處理啟動時的驗證與導航
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // 只在首次渲染後執行，且確保只執行一次
-        if (firstRender && !_hasPerformedAuthCheck)
+        // 只在首次渲染後執行
+        if (firstRender)
         {
-            _hasPerformedAuthCheck = true; // 將旗標設為 true，防止重複執行
-
-            var userName = Environment.UserName;
-            if (!string.IsNullOrEmpty(userName))
+            // [新增] 執行更新檢查
+            if (!_hasPerformedUpdateCheck)
             {
-                Console.WriteLine($"[Debug] MainLayout is using UserInfoService with InstanceId: {UserInfo.InstanceId}");
-                await UserInfo.InitializeAsync(userName);
+                _hasPerformedUpdateCheck = true;
+                // [修改] 呼叫方法時，將此元件已注入的 Navigation 實例作為參數傳入
+                await UpdateService.CheckForUpdateAsync(Navigation);
+            }
 
-                // 在此處檢查使用者是否有效
-                if (UserInfo.IsInitialized && !UserInfo.IsUserValid)
+            // --- 現有的身份驗證邏輯 ---
+            if (!_hasPerformedAuthCheck)
+            {
+                _hasPerformedAuthCheck = true; // 將旗標設為 true，防止重複執行
+
+                var userName = Environment.UserName;
+                if (!string.IsNullOrEmpty(userName))
                 {
-                    // 移除 forceLoad: true，在 Hybrid App 中，標準的客戶端導航更穩定
-                    Navigation.NavigateTo("/access-denied");
-                    return; // 導航後返回
-                }
-            }
-            else
-            {
-                Console.WriteLine("[Error] Unable to retrieve username from Environment.UserName.");
-                Navigation.NavigateTo("/access-denied"); // 移除 forceLoad: true
-                return;
-            }
+                    // ... (此處的既有程式碼保持不變)
+                    await UserInfo.InitializeAsync(userName);
 
-            // 當驗證流程結束後(無論成功或失敗)，都呼叫 StateHasChanged()
-            // 這會讓 UI 從 "正在驗證..." 的畫面更新為正確的內容或是在導航發生前短暫的空白
-            StateHasChanged();
+                    if (UserInfo.IsInitialized && !UserInfo.IsUserValid)
+                    {
+                        Navigation.NavigateTo("/access-denied");
+                        return;
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("[Error] Unable to retrieve username from Environment.UserName.");
+                    Navigation.NavigateTo("/access-denied");
+                    return;
+                }
+                StateHasChanged();
+            }
         }
     }
 }

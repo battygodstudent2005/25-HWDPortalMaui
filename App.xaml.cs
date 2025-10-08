@@ -1,12 +1,15 @@
-﻿namespace HWDPortalMaui
+﻿using HWDPortalMaui.Services;
+
+namespace HWDPortalMaui
 {
     public partial class App : Application
     {
-        public App()
+        public App(UpdateService updateService)
         {
             InitializeComponent();
 
             MainPage = new MainPage();
+
         }
 
         // 覆寫 CreateWindow 方法來設定視窗的初始位置與大小
