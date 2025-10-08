@@ -1,0 +1,35 @@
+﻿@page "/automation"
+<PageTitle>自動化工具 (Automation)</PageTitle>
+
+<div class="construction-container">
+    <div class="construction-content">
+        <div class="construction-icon">
+            🚧
+        </div>
+        <h2 class="construction-title">頁面施工中</h2>
+        <div class="construction-subtitle">
+            自動化工具 (Automation) 功能正在開發中
+        </div>
+        <div class="progress-bar">
+            <div class="progress-fill"></div>
+        </div>
+        <div class="construction-message">
+            <p>我們正在努力完善這個頁面，請稍後再來查看</p>
+            <div class="dots-loading">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter]
+    public MainLayout? Layout { get; set; }
+
+    protected override void OnInitialized()
+    {
+        Layout?.SetPageTitle("自動化工具 (Automation)");
+    }
+}
