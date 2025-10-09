@@ -1,24 +1,66 @@
 ﻿@page "/automation"
 <PageTitle>自動化工具 (Automation)</PageTitle>
 
-<div class="construction-container">
-    <div class="construction-content">
-        <div class="construction-icon">
-            🚧
+<div class="automation-container">
+
+    <div class="tools-grid">
+        <div class="tool-card">
+            <div class="tool-icon">
+                <span class="icon">📋</span>
+            </div>
+            <h3 class="tool-title">RFQ Tool</h3>
+            <p class="tool-description">自動化報價提案工具</p>
+            <div class="button-group">
+                <button class="tool-button disable">
+                    <span class="button-icon">✨</span>
+                    Auto RFQ (維護中)
+                </button>
+            </div>
         </div>
-        <h2 class="construction-title">頁面施工中</h2>
-        <div class="construction-subtitle">
-            自動化工具 (Automation) 功能正在開發中
+
+        <div class="tool-card">
+            <div class="tool-icon">
+                <span class="icon">📊</span>
+            </div>
+            <h3 class="tool-title">BOM Tool</h3>
+            <p class="tool-description">物料清單管理工具</p>
+            <div class="button-group">
+                <button class="tool-button primary" @onclick="Open2ndSourceCombiner">
+                    <span class="button-icon">🔗</span>
+                    2nd Source Combiner
+                </button>
+                <button class="tool-button primary" @onclick="OpenBOMComparison">
+                    <span class="button-icon">🔍</span>
+                    BOM Comparison
+                </button>
+            </div>
         </div>
-        <div class="progress-bar">
-            <div class="progress-fill"></div>
+
+        <div class="tool-card">
+            <div class="tool-icon">
+                <span class="icon">🖥️</span>
+            </div>
+            <h3 class="tool-title">Board File Tool</h3>
+            <p class="tool-description">電路板檔案處理工具</p>
+            <div class="button-group">
+                <button class="tool-button primary" @onclick="OpenAllegroLauncher">
+                    <span class="button-icon">🔨</span>
+                    Allegro Launcher
+                </button>
+            </div>
         </div>
-        <div class="construction-message">
-            <p>我們正在努力完善這個頁面，請稍後再來查看</p>
-            <div class="dots-loading">
-                <span></span>
-                <span></span>
-                <span></span>
+
+        <div class="tool-card">
+            <div class="tool-icon">
+                <span class="icon">🔧</span>
+            </div>
+            <h3 class="tool-title">Debug Tool</h3>
+            <p class="tool-description">除錯與診斷工具</p>
+            <div class="button-group">
+                <button class="tool-button primary" @onclick="OpenI2CMonitorFolder">
+                    <span class="button-icon">🛠️</span>
+                    I2C Monitor
+                </button>
             </div>
         </div>
     </div>
@@ -32,4 +74,56 @@
     {
         Layout?.SetPageTitle("自動化工具 (Automation)");
     }
+    private void OpenI2CMonitorFolder()
+    {
+        string path = @"\\tpea31hwdfs01\Automation\自動化安裝軟體\I2C_Monitor\APP";
+
+        // 使用 Process.Start() 啟動檔案總管並開啟指定路徑
+        System.Diagnostics.Process.Start("explorer.exe", path);
+    }
+    private void Open2ndSourceCombiner()
+    {
+        string folderPath = @"\\tpea31hwdfs01\Automation\自動化安裝軟體\24-Second Source Combiner\APP";
+        ExecuteFirstExeInFolder(folderPath);
+    }
+
+    // 執行指定資料夾下第一個 .exe 檔案的子程式
+    private void ExecuteFirstExeInFolder(string folderPath)
+    {
+        try
+        {
+            // 取得資料夾中所有副檔名為 .exe 的檔案路徑
+            var files = System.IO.Directory.GetFiles(folderPath, "*.exe");
+
+            // 如果有找到任何 .exe 檔案
+            if (files.Length > 0)
+            {
+                // 執行找到的第一個 .exe 檔案
+                System.Diagnostics.Process.Start(files[0]);
+            }
+            else
+            {
+                // 如果沒有找到任何 .exe 檔案
+                Console.WriteLine("找不到任何可執行的 .exe 檔案。");
+            }
+        }
+        catch (Exception ex)
+        {
+            // 處理可能發生的錯誤，例如路徑不存在或存取被拒
+            Console.WriteLine($"執行檔案時發生錯誤: {ex.Message}");
+        }
+    }
+
+    private void OpenAllegroLauncher()
+    {
+        string folderPath = @"\\tpea31hwdfs01\Automation\自動化安裝軟體\Allegro_Launcher\APP";
+        ExecuteFirstExeInFolder(folderPath);
+    }
+
+    private void OpenBOMComparison()
+    {
+        string folderPath = @"\\tpea31hwdfs01\Automation\自動化安裝軟體\23-PTD2-14 2nd Source Compare\APP";
+        ExecuteFirstExeInFolder(folderPath);
+    }
+
 }
