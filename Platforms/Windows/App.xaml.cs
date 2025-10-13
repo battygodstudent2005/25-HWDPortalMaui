@@ -16,8 +16,11 @@ namespace HWDPortalMaui.WinUI
         /// </summary>
         public App()
         {
-
+            // 在初始化任何 UI 元件之前，先執行啟動引導檢查
+            if (WinAppSdkHelper.CheckAndBootstrap())
+            {
                 this.InitializeComponent();
+            }
         }
 
         protected override MauiApp CreateMauiApp() => MauiProgram.CreateMauiApp();
