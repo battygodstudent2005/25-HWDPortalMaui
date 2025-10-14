@@ -4,7 +4,7 @@
 @inject UserInfoService UserInfo
 @inject NavigationManager Navigation
 @inject HWDPortalMaui.Services.UpdateService UpdateService
-
+@inject AIAssistantService _aiAssistantService
 
 @* 加入 @if 判斷式，只有在使用者有效或尚未完成初始化時才顯示主要內容 *@
 @if (!UserInfo.IsInitialized)
@@ -116,17 +116,19 @@ else
         StateHasChanged();
     }
 
+   
+
     // 使用 OnAfterRenderAsync 來處理啟動時的驗證與導航
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         // 只在首次渲染後執行
         if (firstRender)
         {
-            // [新增] 執行更新檢查
+            // 執行更新檢查
             if (!_hasPerformedUpdateCheck)
             {
                 _hasPerformedUpdateCheck = true;
-                // [修改] 呼叫方法時，將此元件已注入的 Navigation 實例作為參數傳入
+                // 呼叫方法時，將此元件已注入的 Navigation 實例作為參數傳入
                 await UpdateService.CheckForUpdateAsync(Navigation);
             }
 
@@ -146,6 +148,12 @@ else
                         Navigation.NavigateTo("/access-denied");
                         return;
                     }
+                    // 當使用者資訊成功初始化後，才開始初始化 AI 助理服務
+                    // 這樣可以確保 AIAssistantService 能正確取得到 UserName
+                    if (UserInfo.IsUserValid)
+                    {
+                        await Task.Run(() => _aiAssistantService.InitializeAssistantAsync());
+                    }
                 }
                 else
                 {
@@ -157,4 +165,6 @@ else
             }
         }
     }
+
+    
 }

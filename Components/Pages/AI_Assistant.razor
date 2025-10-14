@@ -1,23 +1,19 @@
 ﻿@page "/AI_Assistant"
-@using Azure.AI.OpenAI
-@using OpenAI.Assistants
-@using Azure
-@using System.Text
-@using OpenAI.Files
-@using OpenAI.VectorStores
 @using HWDPortalMaui.Services
-@inject UserInfoService _userInfoService
+@inject AIAssistantService _aiAssistantService
+@implements IDisposable
 
 <div class="ai-assistant-container">
     <div id="chat-history" class="chat-history">
-        @foreach (var message in chatMessages)
+        @* [修改] 所有資料來源都改為 _aiAssistantService *@
+        @foreach (var message in _aiAssistantService.ChatMessages)
         {
             <div class="chat-message @(message.Author == "User" ? "user-message" : "ai-message")">
                 <div class="message-author">@(message.Author)</div>
                 <div class="message-content">@((MarkupString)message.Content)</div>
             </div>
         }
-        @if (isInitializing)
+        @if (_aiAssistantService.IsInitializing)
         {
             <div class="chat-message ai-message">
                 <div class="message-author">HWD AI</div>
@@ -30,7 +26,7 @@
             </div>
         }
 
-        @if (isLoading)
+        @if (_aiAssistantService.IsLoading)
         {
             <div class="chat-message ai-message">
                 <div class="message-author">HWD AI</div>
@@ -46,40 +42,41 @@
 
     <div class="chat-input-area">
         <div class="button-group-top">
-            <button class="btn-new-chat" @onclick="StartNewChatAsync" disabled="@(isLoading || isInitializing)">
+            @* [修改] 所有事件和狀態都綁定到 _aiAssistantService *@
+            <button class="btn-new-chat" @onclick="_aiAssistantService.StartNewChatAsync" disabled="@(_aiAssistantService.IsLoading || _aiAssistantService.IsInitializing)">
                 <span class="oi oi-plus" aria-hidden="true"></span> 開新對話
             </button>
-            <button class="btn-settings" @onclick="OpenSettingsAsync" disabled="@(isLoading || isInitializing)">
+            <button class="btn-settings" @onclick="_aiAssistantService.OpenSettingsAsync" disabled="@(_aiAssistantService.IsLoading || _aiAssistantService.IsInitializing)">
                 <span class="oi oi-cog" aria-hidden="true"></span> 助理設定
             </button>
         </div>
         <div class="input-row">
             <textarea class="chat-textarea"
-                      @bind="userMessageInput"
+                      @bind="_aiAssistantService.UserMessageInput"
                       @bind:event="oninput"
                       placeholder="在這裡輸入您的訊息... (Shift+Enter 換行)"
-                      @onkeydown="HandleKeyDown"
-                      disabled="@(isLoading || isInitializing)">
+                      @onkeydown="_aiAssistantService.HandleKeyDown"
+                      disabled="@(_aiAssistantService.IsLoading || _aiAssistantService.IsInitializing)">
             </textarea>
             <button class="btn-send"
-                    @onclick="SendMessageAsync"
-                    disabled="@(isLoading || isInitializing)">
+                    @onclick="_aiAssistantService.SendMessageAsync"
+                    disabled="@(_aiAssistantService.IsLoading || _aiAssistantService.IsInitializing)">
                 送出
             </button>
         </div>
     </div>
 </div>
 
-@* [新增] Blazor 版本的通知訊息列 *@
-@if (!string.IsNullOrEmpty(notificationMessage))
+@* [修改] 所有通知訊息的狀態都來自 _aiAssistantService *@
+@if (!string.IsNullOrEmpty(_aiAssistantService.NotificationMessage))
 {
-    <div class="notification-bar @notificationCssClass">
-        @notificationMessage
+    <div class="notification-bar @_aiAssistantService.NotificationCssClass">
+        @_aiAssistantService.NotificationMessage
     </div>
 }
 
-@* [新增] Blazor 版本的「開新對話」確認對話框 *@
-@if (showNewChatConfirm)
+@* [修改] 確認對話框的狀態綁定到 _aiAssistantService *@
+@if (_aiAssistantService.ShowNewChatConfirm)
 {
     <div class="settings-modal-backdrop">
         <div class="settings-modal-content" style="max-width: 400px;">
@@ -90,52 +87,52 @@
                 <p>確定要開啟新對話嗎？目前的對話將會被清空。</p>
             </div>
             <div class="settings-modal-footer">
-                <button class="btn btn-secondary" @onclick="() => showNewChatConfirm = false">取消</button>
-                <button class="btn btn-danger" @onclick="ConfirmNewChatAsync">確定</button>
+                <button class="btn btn-secondary" @onclick="_aiAssistantService.CancelNewChat">取消</button>
+                <button class="btn btn-danger" @onclick="_aiAssistantService.ConfirmNewChatAsync">確定</button>
             </div>
         </div>
     </div>
 }
 
-
-@if (showSettingsModal)
+@* [修改] 設定視窗的狀態和資料都綁定到 _aiAssistantService *@
+@if (_aiAssistantService.ShowSettingsModal)
 {
     <div class="settings-modal-backdrop">
         <div class="settings-modal-content">
             <div class="settings-modal-header">
                 <h3>助理設定</h3>
-                <button class="btn-close" @onclick="CloseSettingsModalAsync">×</button>
+                <button class="btn-close" @onclick="_aiAssistantService.CloseSettingsModalAsync">×</button>
             </div>
             <div class="settings-modal-body">
                 <div class="settings-left-panel">
                     <div class="settings-group">
                         <label>助理名稱:</label>
-                        <span>@currentSettings.AssistantName</span>
+                        <span>@_aiAssistantService.CurrentSettings.AssistantName</span>
                     </div>
                     <div class="settings-group">
                         <label>部署模型:</label>
-                        <span>@currentSettings.Model</span>
+                        <span>@_aiAssistantService.CurrentSettings.Model</span>
                     </div>
                     <div class="settings-group">
                         <label>向量存放區:</label>
-                        <span>@currentSettings.VectorStoreName</span>
+                        <span>@_aiAssistantService.CurrentSettings.VectorStoreName</span>
                     </div>
 
                     <div class="settings-group settings-group-vertical">
                         <label for="instructions">Instructions (指示):</label>
-                        <textarea id="instructions" class="settings-textarea" @bind="currentSettings.Instructions"></textarea>
+                        <textarea id="instructions" class="settings-textarea" @bind="_aiAssistantService.CurrentSettings.Instructions"></textarea>
                     </div>
 
                     <div class="settings-group settings-group-vertical">
-                        <label for="temperature">Temperature (溫度): @currentSettings.Temperature.ToString("F2")</label>
+                        <label for="temperature">Temperature (溫度): @_aiAssistantService.CurrentSettings.Temperature.ToString("F2")</label>
                         <span>較高的值（如 0.8）將使輸出更加隨機，而較低的值（如 0.2）將使其更加集中和確定性。</span>
-                        <input type="range" id="temperature" min="0.01" max="1.0" step="0.01" @bind="currentSettings.Temperature" />
+                        <input type="range" id="temperature" min="0.01" max="1.0" step="0.01" @bind="_aiAssistantService.CurrentSettings.Temperature" />
                     </div>
 
                     <div class="settings-group">
                         <label for="common-vector">啟用HWD公用資料庫</label>
                         <label class="switch">
-                            <input type="checkbox" id="common-vector" @bind="currentSettings.UseCommonVectorStore">
+                            <input type="checkbox" id="common-vector" @bind="_aiAssistantService.CurrentSettings.UseCommonVectorStore">
                             <span class="slider round"></span>
                         </label>
                     </div>
@@ -144,7 +141,7 @@
                 <div class="settings-right-panel">
                     <div class="settings-group">
                         <h5 class="panel-title">向量區檔案</h5>
-                        <InputFile OnChange="HandleFileSelected" class="form-control" title="上傳檔案" disabled="@(isLoading || isInitializing)" />
+                        <InputFile OnChange="_aiAssistantService.HandleFileSelected" class="form-control" title="上傳檔案" disabled="@(_aiAssistantService.IsLoading || _aiAssistantService.IsInitializing)" />
                     </div>
                     <div class="file-list-container">
                         <table class="file-list-table">
@@ -155,14 +152,14 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                @if (filesInVectorStore.Any())
+                                @if (_aiAssistantService.FilesInVectorStore.Any())
                                 {
-                                    @foreach (var file in filesInVectorStore)
+                                    @foreach (var file in _aiAssistantService.FilesInVectorStore)
                                     {
                                         <tr>
                                             <td title="@file.Id">@file.Name</td>
                                             <td>
-                                                <button class="btn-delete-file" @onclick="() => DeleteFileAsync(file.Id)" disabled="@(isLoading || isInitializing)">刪除</button>
+                                                <button class="btn-delete-file" @onclick="() => _aiAssistantService.DeleteFileAsync(file.Id)" disabled="@(_aiAssistantService.IsLoading || _aiAssistantService.IsInitializing)">刪除</button>
                                             </td>
                                         </tr>
                                     }
@@ -179,8 +176,8 @@
                 </div>
             </div>
             <div class="settings-modal-footer">
-                <button class="btn btn-secondary" @onclick="CloseSettingsModalAsync" disabled="@(isLoading || isInitializing)">取消</button>
-                <button class="btn btn-primary" @onclick="SaveSettingsAsync" disabled="@(isLoading || isInitializing)">儲存設定</button>
+                <button class="btn btn-secondary" @onclick="_aiAssistantService.CloseSettingsModalAsync" disabled="@(_aiAssistantService.IsLoading || _aiAssistantService.IsInitializing)">取消</button>
+                <button class="btn btn-primary" @onclick="_aiAssistantService.SaveSettingsAsync" disabled="@(_aiAssistantService.IsLoading || _aiAssistantService.IsInitializing)">儲存設定</button>
             </div>
         </div>
     </div>
@@ -188,508 +185,22 @@
 
 
 @code {
-#pragma warning disable OPENAI001
+    // [移除] 移除所有 C# 邏輯，只留下與元件生命週期和 UI 更新相關的程式碼
+
     [CascadingParameter]
     public MainLayout? Layout { get; set; }
 
-    // [新增] 用於取代 alert 的通知訊息變數
-    private string? notificationMessage;
-    private string notificationCssClass = "info";
-
-    // [新增] 用於取代 confirm 的確認對話框變數
-    private bool showNewChatConfirm = false;
-
-    private class ChatMessage
+    protected override void OnInitialized()
     {
-        public string Author { get; set; } = string.Empty;
-        public string Content { get; set; } = string.Empty;
-    }
-
-    private class AssistantFileInfo
-    {
-        public string Id { get; set; } = string.Empty;
-        public string Name { get; set; } = string.Empty;
-    }
-
-    private class AssistantSettingsModel
-    {
-        public string? AssistantName { get; set; }
-        public string? Model { get; set; }
-        public string? Instructions { get; set; }
-        public float Temperature { get; set; }
-        public string? VectorStoreName { get; set; }
-        public bool UseCommonVectorStore { get; set; }
-    }
-
-    private List<ChatMessage> chatMessages = new List<ChatMessage>();
-    private string userMessageInput = string.Empty;
-    private bool isLoading = false;
-    private bool isInitializing = true;
-    private bool showSettingsModal = false;
-    private AssistantSettingsModel currentSettings = new();
-    private List<AssistantFileInfo> filesInVectorStore = new();
-    private string? userVectorStoreId;
-    private bool isUsingCommonVector;
-
-    private const string CommonVectorStoreId = "vs_PvsB5mOj3lbX5avtB13Ol2hw";
-    private const string EmptyVectorStoreId = "vs_FVwAEhQWfk98hgZ9GmFE1LWK";
-
-    private string OpenAI_ApiKey = "d506304e02094ab0b0a0a95d5c4b268f";
-    private string OpenAI_IndexModel = "gpt-4.1-mini";
-    private string OpenAI_Uri = "https://ved1openai1.openai.azure.com/";
-
-    private AzureOpenAIClient? azureClient;
-    private AssistantClient? assistantClient;
-    private AssistantThread? thread;
-    private Assistant? assistant;
-    private RunCreationOptions? runOptions;
-
-    // [新增] 一個可重複使用的通知方法
-    private async Task ShowNotification(string message, string type = "success", int delay = 3000)
-    {
-        notificationMessage = message;
-        notificationCssClass = $"notification-{type}"; // e.g., notification-success or notification-danger
-        StateHasChanged();
-        await Task.Delay(delay);
-        notificationMessage = null;
-        StateHasChanged();
-    }
-
-    protected override async Task OnInitializedAsync()
-    {
-        Console.WriteLine("[Debug] OnInitializedAsync: 元件開始初始化...");
+        // [新增] 設定頁面標題
         Layout?.SetPageTitle("智能助理 (AI Assistant)");
-        chatMessages.Add(new ChatMessage { Author = "HWD AI", Content = "Compal Electronics, Inc.<br>Hardware Division /Automation Team<br>=================================" });
-        await InitializeAssistantAsync();
-        isInitializing = false;
-        StateHasChanged();
-        Console.WriteLine("[Debug] OnInitializedAsync: 元件初始化完成。");
+        // [新增] 訂閱服務的狀態變更事件，當服務狀態改變時，通知此元件重新渲染
+        _aiAssistantService.OnChange += StateHasChanged;
     }
 
-    private async Task HandleKeyDown(KeyboardEventArgs e)
+    // [新增] 實作 IDisposable 介面，在元件銷毀時取消訂閱，以避免記憶體洩漏
+    public void Dispose()
     {
-        if (e.Key == "Enter" && !e.ShiftKey)
-        {
-            await SendMessageAsync();
-        }
+        _aiAssistantService.OnChange -= StateHasChanged;
     }
-
-    private async Task InitializeAssistantAsync()
-    {
-        Console.WriteLine("[Debug] InitializeAssistantAsync: 開始初始化助理...");
-        try
-        {
-            // 改為從 UserInfoService 獲取使用者名稱，以確保在 IIS 環境中能正確識別使用者
-            string? userName = _userInfoService.UserName;
-            if (string.IsNullOrEmpty(userName))
-            {
-                // 如果因故未取得使用者名稱，則記錄錯誤並中止初始化
-                await ShowNotification("無法取得使用者資訊，助理初始化失敗。", "danger");
-                Console.WriteLine("[Debug] InitializeAssistantAsync: UserInfo.UserName 為空，中止初始化。");
-                return;
-            }
-
-            string assistantName = "Assistant_" + userName;
-            string vectorStoreName = "Vector_" + userName;
-
-            azureClient = new AzureOpenAIClient(new Uri(OpenAI_Uri), new AzureKeyCredential(OpenAI_ApiKey));
-
-            assistantClient = azureClient.GetAssistantClient();
-            var vectorStoreClient = azureClient.GetVectorStoreClient();
-            bool vectorStoreExists = false;
-            await foreach (var vectorStore in vectorStoreClient.GetVectorStoresAsync())
-            {
-                if (vectorStore.Name == vectorStoreName)
-                {
-                    if (vectorStore.Status.ToString() == "Expired")
-                    {
-                        await vectorStoreClient.DeleteVectorStoreAsync(vectorStore.Id);
-                    }
-                    else
-                    {
-                        vectorStoreExists = true;
-                        userVectorStoreId = vectorStore.Id;
-                        Console.WriteLine($"[Debug] 找到使用者向量存放區, ID: {userVectorStoreId}");
-                    }
-                    break;
-                }
-            }
-
-            if (!vectorStoreExists)
-            {
-                // 修正 CreateVectorStoreAsync 參數順序，將 VectorStoreCreationOptions 放在第一個參數。
-                var creationResult = await vectorStoreClient.CreateVectorStoreAsync(new VectorStoreCreationOptions { Name = vectorStoreName });
-                userVectorStoreId = creationResult.Value.Id;
-                Console.WriteLine($"[Debug] 建立新的使用者向量存放區, ID: {userVectorStoreId}");
-            }
-
-            string? assistantId = null;
-            await foreach (Assistant assistantPageItem in assistantClient.GetAssistantsAsync())
-            {
-                if (assistantPageItem.Name == assistantName)
-                {
-                    assistantId = assistantPageItem.Id;
-                    break;
-                }
-            }
-
-            if (!string.IsNullOrEmpty(assistantId))
-            {
-                Console.WriteLine($"[Debug] 找到已存在的助理, ID: {assistantId}, 正在更新...");
-                var modificationOptions = new AssistantModificationOptions
-                {
-                    Model = OpenAI_IndexModel,
-                    Instructions = "1.保持禮貌\r\n2.使用表格呈現資料\r\n3.僅回答最近一次的問題\r\n4.預設使用繁體中文回答",
-                    Temperature = 0.2f,
-                    ToolResources = new() { FileSearch = new() { VectorStoreIds = { userVectorStoreId } } }
-                };
-                assistant = (await assistantClient.ModifyAssistantAsync(assistantId, modificationOptions)).Value;
-            }
-            else
-            {
-                var creationOptions = new AssistantCreationOptions
-                {
-                    Name = assistantName,
-                    Instructions = "1.保持禮貌\r\n2.使用表格呈現資料\r\n3.僅回答最近一次的問題\r\n4.預設使用繁體中文回答",
-                    Temperature = 0.2f,
-                    ToolResources = new() { FileSearch = new() { VectorStoreIds = { userVectorStoreId } } }
-                };
-                creationOptions.Tools.Add(new FileSearchToolDefinition());
-                assistant = (await assistantClient.CreateAssistantAsync(OpenAI_IndexModel, creationOptions)).Value;
-                Console.WriteLine($"[Debug] 建立新的助理, ID: {assistant.Id}");
-            }
-
-            thread = (await assistantClient.CreateThreadAsync(new ThreadCreationOptions()
-            {
-                ToolResources = new()
-                {
-                    FileSearch = new() { VectorStoreIds = { CommonVectorStoreId } }
-                }
-            })).Value;
-            isUsingCommonVector = true;
-            Console.WriteLine($"[Debug] 已建立新的對話線程(Thread), ID: {thread.Id}, 並指向公用向量存放區。");
-
-            runOptions = new RunCreationOptions
-            {
-                AdditionalInstructions = "When possible, create table from data I ask for. Ensure columns represent distinct categories or data points, making the table clear and easy to understand."
-            };
-            Console.WriteLine("[Debug] InitializeAssistantAsync: 助理初始化成功。");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[Debug] InitializeAssistantAsync: 發生錯誤: {ex.Message}");
-            chatMessages.Add(new ChatMessage { Author = "Error", Content = $"助理初始化失敗: {ex.Message}" });
-        }
-    }
-
-    private async Task SendMessageAsync()
-    {
-        if (string.IsNullOrWhiteSpace(userMessageInput) || isLoading)
-        {
-            return;
-        }
-
-        Console.WriteLine("[Debug] SendMessageAsync: 開始發送訊息...");
-        isLoading = true;
-        var userMessage = userMessageInput.Trim();
-        if (string.IsNullOrWhiteSpace(userMessage))
-        {
-            userMessageInput = string.Empty;
-            return;
-        }
-        userMessageInput = string.Empty;
-
-        chatMessages.Add(new ChatMessage { Author = "User", Content = userMessage });
-        StateHasChanged();
-
-        await StreamingChat(userMessage);
-
-        isLoading = false;
-        StateHasChanged();
-        Console.WriteLine("[Debug] SendMessageAsync: 訊息處理完成。");
-    }
-
-    private async Task StreamingChat(string userMessage)
-    {
-        if (assistantClient == null || thread == null || assistant == null || runOptions == null)
-        {
-            chatMessages.Add(new ChatMessage { Author = "Error", Content = "助理尚未準備就緒。" });
-            return;
-        }
-
-        try
-        {
-            Console.WriteLine($"[Debug] StreamingChat: 對使用者訊息 '{userMessage}' 建立 Message...");
-            await assistantClient.CreateMessageAsync(thread.Id, MessageRole.User, new[] { MessageContent.FromText(userMessage) });
-            var aiResponseBuilder = new StringBuilder();
-            var currentAIMessage = new ChatMessage { Author = "HWD AI", Content = "" };
-            chatMessages.Add(currentAIMessage);
-            Console.WriteLine("[Debug] StreamingChat: 開始建立 Run 並接收串流回應...");
-
-            await foreach (StreamingUpdate streamingUpdate in assistantClient.CreateRunStreamingAsync(thread.Id, assistant.Id, runOptions))
-            {
-                if (streamingUpdate is MessageContentUpdate contentUpdate && contentUpdate.Text != null)
-                {
-                    aiResponseBuilder.Append(contentUpdate.Text);
-                    currentAIMessage.Content = aiResponseBuilder.ToString().Replace("\n", "<br>");
-                    StateHasChanged();
-                }
-            }
-            Console.WriteLine($"[Debug] StreamingChat: 串流接收完成，AI 最終回覆: {aiResponseBuilder.ToString()}");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[Debug] StreamingChat: 發生錯誤: {ex.Message}");
-            chatMessages.Add(new ChatMessage { Author = "Error", Content = $"訊息處理失敗: {ex.Message}" });
-        }
-    }
-
-    private async Task StartNewChatAsync()
-    {
-        showNewChatConfirm = true;
-        await Task.CompletedTask;
-    }
-
-    // [新增] 真正執行清除對話的邏輯，由確認對話框的「確定」按鈕呼叫
-    private async Task ConfirmNewChatAsync()
-    {
-        showNewChatConfirm = false;
-        isLoading = true;
-        StateHasChanged();
-
-        chatMessages.Clear();
-        if (thread != null && assistantClient != null)
-        {
-            Console.WriteLine($"[Debug] StartNewChatAsync: 刪除舊對話線程(Thread)，ID: {thread.Id}");
-            await assistantClient.DeleteThreadAsync(thread.Id);
-        }
-
-        chatMessages.Add(new ChatMessage { Author = "HWD AI", Content = "Compal Electronics, Inc.<br>Hardware Division /Automation Team<br>=================================" });
-
-        if (assistantClient != null)
-        {
-            thread = await assistantClient.CreateThreadAsync();
-            Console.WriteLine($"[Debug] StartNewChatAsync: 建立新的對話線程(Thread)，ID: {thread.Id}");
-        }
-
-        isLoading = false;
-        StateHasChanged();
-    }
-
-    private async Task OpenSettingsAsync()
-    {
-        Console.WriteLine("[Debug] OpenSettingsAsync: 使用者點擊助理設定。");
-        if (assistant == null || assistantClient == null || azureClient == null)
-        {
-            await ShowNotification("助理尚未初始化，無法開啟設定。", "danger");
-            return;
-        }
-
-        isInitializing = true;
-        StateHasChanged();
-        try
-        {
-            var currentAssistantResult = await assistantClient.GetAssistantAsync(assistant.Id);
-            var currentAssistant = currentAssistantResult.Value;
-
-            currentSettings = new AssistantSettingsModel
-            {
-                AssistantName = currentAssistant.Name,
-                Model = currentAssistant.Model,
-                Instructions = currentAssistant.Instructions,
-                Temperature = currentAssistant.Temperature ?? 0.2f,
-                UseCommonVectorStore = isUsingCommonVector
-            };
-
-            var userVsId = currentAssistant.ToolResources?.FileSearch?.VectorStoreIds.FirstOrDefault();
-            if (!string.IsNullOrEmpty(userVsId))
-            {
-                var vectorStoreClient = azureClient.GetVectorStoreClient();
-                await foreach (var vectorStore in vectorStoreClient.GetVectorStoresAsync())
-                {
-                    if (vectorStore.Id == userVsId)
-                    {
-                        currentSettings.VectorStoreName = vectorStore.Name;
-                        break;
-                    }
-                }
-            }
-            else
-            {
-                currentSettings.VectorStoreName = "個人資料庫 (未連結)";
-            }
-
-            Console.WriteLine($"[Debug] 正在為設定介面載入使用者向量存放區 '{userVectorStoreId}' 的檔案...");
-            await LoadFilesInVectorStoreAsync(userVectorStoreId);
-
-            showSettingsModal = true;
-        }
-        catch (Exception ex)
-        {
-            await ShowNotification($"載入助理設定失敗: {ex.Message}", "danger");
-            Console.WriteLine($"[Debug] OpenSettingsAsync: 載入設定時發生錯誤: {ex.Message}");
-        }
-        finally
-        {
-            isInitializing = false;
-            StateHasChanged();
-        }
-    }
-
-    private async Task LoadFilesInVectorStoreAsync(string? vectorStoreId)
-    {
-        filesInVectorStore.Clear();
-        if (string.IsNullOrEmpty(vectorStoreId) || assistantClient == null || azureClient == null)
-        {
-            return;
-        }
-
-        var vectorStoreClient = azureClient.GetVectorStoreClient();
-        var fileClient = azureClient.GetOpenAIFileClient();
-        var allFiles = await fileClient.GetFilesAsync();
-        var fileDict = allFiles.Value.ToDictionary(f => f.Id, f => f.Filename);
-        await foreach (var association in vectorStoreClient.GetVectorStoreFilesAsync(vectorStoreId))
-        {
-            if (fileDict.TryGetValue(association.FileId, out var fileName))
-            {
-                filesInVectorStore.Add(new AssistantFileInfo { Id = association.FileId, Name = fileName });
-            }
-        }
-    }
-
-    private async Task HandleFileSelected(Microsoft.AspNetCore.Components.Forms.InputFileChangeEventArgs e)
-    {
-        if (assistantClient == null || azureClient == null || string.IsNullOrEmpty(userVectorStoreId))
-        {
-            await ShowNotification("向量存放區尚未準備就緒，無法上傳檔案。", "warning");
-            return;
-        }
-
-        isLoading = true;
-        StateHasChanged();
-
-        var file = e.File;
-        try
-        {
-            await using var memoryStream = new MemoryStream();
-            await file.OpenReadStream(maxAllowedSize: 200 * 1024 * 1024).CopyToAsync(memoryStream);
-            memoryStream.Position = 0;
-
-            var fileClient = azureClient.GetOpenAIFileClient();
-            var uploadResult = await fileClient.UploadFileAsync(memoryStream, file.Name, FileUploadPurpose.Assistants);
-
-            if (uploadResult.Value != null)
-            {
-                string fileId = uploadResult.Value.Id;
-                var vectorStoreClient = azureClient.GetVectorStoreClient();
-
-                var deleteResult = await fileClient.DeleteFileAsync(fileId);
-                await Task.Delay(2000);
-                await ShowNotification($"檔案 '{file.Name}' 已成功上傳並加入向量存放區。", "success");
-
-                await LoadFilesInVectorStoreAsync(userVectorStoreId);
-            }
-        }
-        catch (Exception ex)
-        {
-            await ShowNotification($"檔案上傳失敗: {ex.Message}", "danger");
-            Console.WriteLine($"[Debug] HandleFileSelected: 上傳失敗: {ex.Message}");
-        }
-        finally
-        {
-            isLoading = false;
-            StateHasChanged();
-        }
-    }
-
-    private async Task DeleteFileAsync(string fileId)
-    {
-
-        isLoading = true;
-        StateHasChanged();
-
-        try
-        {
-            var fileClient = azureClient.GetOpenAIFileClient();
-            var deleteResult = await fileClient.DeleteFileAsync(fileId);
-
-            if (deleteResult.Value != null && deleteResult.Value.Deleted)
-            {
-                await Task.Delay(2000);
-                await ShowNotification("檔案已成功刪除。", "success");
-                await LoadFilesInVectorStoreAsync(userVectorStoreId);
-            }
-            else
-            {
-                await ShowNotification("檔案刪除失敗。", "danger");
-            }
-        }
-        catch (Exception ex)
-        {
-            await ShowNotification($"刪除檔案時發生錯誤: {ex.Message}", "danger");
-            Console.WriteLine($"[Debug] DeleteFileAsync: 刪除失敗: {ex.Message}");
-        }
-        finally
-        {
-            isLoading = false;
-            StateHasChanged();
-        }
-    }
-
-    private async Task SaveSettingsAsync()
-    {
-        if (assistantClient == null || assistant == null || thread == null) return;
-        isLoading = true;
-        StateHasChanged();
-
-        try
-        {
-            var assistantOptions = new AssistantModificationOptions
-            {
-                Instructions = currentSettings.Instructions,
-                Temperature = currentSettings.Temperature
-            };
-            var updatedAssistantResult = await assistantClient.ModifyAssistantAsync(assistant.Id, assistantOptions);
-            assistant = updatedAssistantResult.Value;
-            Console.WriteLine("[Debug] 助理的 Instructions 和 Temperature 已更新。");
-
-            if (currentSettings.UseCommonVectorStore != isUsingCommonVector)
-            {
-                string targetVectorStoreId = currentSettings.UseCommonVectorStore ? CommonVectorStoreId : EmptyVectorStoreId;
-                string targetName = currentSettings.UseCommonVectorStore ? "公用資料庫" : "空資料庫";
-
-                Console.WriteLine($"[Debug] 向量存放區開關已變更。正在將執行緒 '{thread.Id}' 指向 '{targetName}' ({targetVectorStoreId})。");
-                var threadOptions = new ThreadModificationOptions
-                {
-                    ToolResources = new()
-                    {
-                        FileSearch = new() { VectorStoreIds = { targetVectorStoreId } }
-                    }
-                };
-                await assistantClient.ModifyThreadAsync(thread.Id, threadOptions);
-                isUsingCommonVector = currentSettings.UseCommonVectorStore;
-            }
-
-            await ShowNotification("助理設定已成功儲存。", "success");
-            showSettingsModal = false;
-        }
-        catch (Exception ex)
-        {
-            await ShowNotification($"儲存設定失敗: {ex.Message}", "danger");
-            Console.WriteLine($"[Debug] SaveSettingsAsync: 儲存失敗: {ex.Message}");
-        }
-        finally
-        {
-            isLoading = false;
-            StateHasChanged();
-        }
-    }
-
-    private async Task CloseSettingsModalAsync()
-    {
-        showSettingsModal = false;
-        await InvokeAsync(StateHasChanged);
-    }
-
-#pragma warning restore OPENAI001
 }
