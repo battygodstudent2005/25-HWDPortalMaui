@@ -4,13 +4,15 @@
     display: flex;
     flex-direction: column;
     height: calc(100vh - 120px); /* 減去 header/footer 的高度 */
-    max-width: 900px;
-    margin: 20px auto;
+    width: 100%; /* 改為佔滿整個視窗寬度 */
+    max-width: none; /* 移除最大寬度限制 */
+    margin: 20px 0; /* 移除 auto 置中，改為上下留白 */
     border: 1px solid #ccc;
     border-radius: 8px;
     overflow: hidden;
     box-shadow: 0 4px 8px rgba(0,0,0,0.1);
 }
+
 
 .chat-history {
     flex-grow: 1;

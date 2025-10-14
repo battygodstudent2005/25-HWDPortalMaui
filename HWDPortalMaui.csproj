@@ -11,7 +11,7 @@
       <EnableDefaultCssItems>false</EnableDefaultCssItems>
       <Nullable>enable</Nullable>
 
-      <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+      <WindowsAppSDKSelfContained>False</WindowsAppSDKSelfContained>
 
       <ApplicationTitle>HWDPortalMaui</ApplicationTitle>
       <ApplicationId>com.companyname.hwdportalmaui</ApplicationId>
