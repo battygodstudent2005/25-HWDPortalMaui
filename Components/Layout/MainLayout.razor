@@ -152,7 +152,9 @@ else
                     // 這樣可以確保 AIAssistantService 能正確取得到 UserName
                     if (UserInfo.IsUserValid)
                     {
-                        await Task.Run(() => _aiAssistantService.InitializeAssistantAsync());
+                        // 將 AI 服務的初始化改為在背景執行，不等待其完成
+                        // 如此可避免 UI 因等待網路請求而被卡住
+                        _ = Task.Run(() => _aiAssistantService.InitializeAssistantAsync());
                     }
                 }
                 else

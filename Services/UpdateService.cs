@@ -101,13 +101,17 @@ namespace HWDPortalMaui.Services
         {
             try
             {
-                // 檢查是否有有效的安裝檔路徑
-                if (!string.IsNullOrEmpty(_latestInstallerPath) && File.Exists(_latestInstallerPath))
-                {
-                    Debug.WriteLine("[Update Service] Starting installer...");
+                // 定義安裝批次檔的網路路徑
+                const string batchInstallerPath = @"\\tpea31hwdfs01\Automation\Automation Software\HWD_Portal_Maui\APP\02_HWDPortalMauIinstall.bat";
 
-                    // Start installer
-                    Process.Start(new ProcessStartInfo(_latestInstallerPath) { UseShellExecute = true });
+                // 檢查批次檔是否存在
+                if (File.Exists(batchInstallerPath))
+                {
+                    // 更新偵錯訊息
+                    Debug.WriteLine("[Update Service] Starting batch installer...");
+
+                    // 啟動批次檔安裝程式
+                    Process.Start(new ProcessStartInfo(batchInstallerPath) { UseShellExecute = true });
 
                     // 增加延遲時間,讓安裝程式完全啟動
                     await Task.Delay(500);
@@ -119,7 +123,8 @@ namespace HWDPortalMaui.Services
                 }
                 else
                 {
-                    Debug.WriteLine("[Update Service] Error: Installer path is invalid or not set.");
+                    // 更新錯誤訊息，指出找不到批次檔
+                    Debug.WriteLine($"[Update Service] Error: Batch installer not found at {batchInstallerPath}.");
                 }
             }
             catch (Exception ex)

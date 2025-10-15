@@ -39,8 +39,6 @@
 /* 卡片樣式改善 */
 .card.shadow-sm {
     box-shadow: 0 2px 4px rgba(0,0,0,0.08);
-    border: none;
-    border-radius: 0.5rem;
 }
 
 .card-header {
