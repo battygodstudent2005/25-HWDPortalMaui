@@ -1,6 +1,4 @@
-﻿/* [新增] 為了與 Dashboard 元件風格同步而建立的 CSS 檔案 */
-
-/* 卡片樣式改善 */
+﻿/* 卡片樣式改善 */
 .card.shadow-sm {
     box-shadow: 0 2px 4px rgba(0,0,0,0.08); /* */
 }
@@ -13,10 +11,10 @@
     padding: 0.75rem 1rem; /* */
 }
 
-    /* 緊湊型卡片頭部 (與 Dashboard 的篩選條件區塊風格一致) */
-    .card-header.py-2 {
-        padding-top: 0.5rem !important; /* */
-        padding-bottom: 0.5rem !important; /* */
-        font-size: 0.9rem; /* */
-        font-weight: 600; /* */
-    }
+/* 緊湊型卡片頭部 (與 Dashboard 的篩選條件區塊風格一致) */
+.card-header.py-2 {
+    padding-top: 0.5rem !important; /* */
+    padding-bottom: 0.5rem !important; /* */
+    font-size: 0.9rem; /* */
+    font-weight: 600; /* */
+}

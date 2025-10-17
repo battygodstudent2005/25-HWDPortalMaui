@@ -116,13 +116,13 @@ namespace HWDPortalMaui.Services
         public async Task UploadBulletinAsync(string department, IBrowserFile file)
         {
             // 從 appsettings.json 讀取儲存路徑的設定
-            var storedFilesPath = _configuration.GetValue<string>("StoredFilesPath");
+            var storedFilesPath = _configuration.GetValue<string>("StoredBulletinFilesPath");
             if (string.IsNullOrEmpty(storedFilesPath))
             {
                 throw new InvalidOperationException("appsettings.json 中未設定 StoredFilesPath。");
             }
 
-            // [修改] 使用 MAUI 的 FileSystem.AppDataDirectory 來取得平台通用的應用程式資料目錄
+            // 使用 MAUI 的 FileSystem.AppDataDirectory 來取得平台通用的應用程式資料目錄
             var uploadPath = Path.Combine(FileSystem.AppDataDirectory, storedFilesPath);
             // 如果目錄不存在，就建立它
             Directory.CreateDirectory(uploadPath);
@@ -195,13 +195,13 @@ namespace HWDPortalMaui.Services
             if (bulletinToDelete == null)
             {
                 _logger.LogWarning($"嘗試刪除一個不存在的公告紀錄 (Id: {id})。");
-                return; // [修改] 如果紀錄不存在，直接返回，不執行後續操作
+                return; // 如果紀錄不存在，直接返回，不執行後續操作
             }
             // 步驟 2: 在刪除前先記錄操作
             await LogActionAsync("Delete", bulletinToDelete, bulletinToDelete.FileFullPath);
 
 
-            // [修改] 步驟 3: 刪除資料庫紀錄
+            // 步驟 3: 刪除資料庫紀錄
             const string deleteSql = "DELETE FROM A31_HWD_Portal_Bulletin WHERE Id = @Id";
             var affectedRows = await connection.ExecuteAsync(deleteSql, new { Id = id });
 
@@ -212,7 +212,7 @@ namespace HWDPortalMaui.Services
                 // 操作成功後，清除快取
                 _bulletinsCache = null;
 
-                // [修改] 步驟 4: 如果資料庫紀錄刪除成功，且檔案路徑存在，則刪除實體檔案
+                // 步驟 4: 如果資料庫紀錄刪除成功，且檔案路徑存在，則刪除實體檔案
                 if (!string.IsNullOrEmpty(bulletinToDelete.FileFullPath))
                 {
                     try

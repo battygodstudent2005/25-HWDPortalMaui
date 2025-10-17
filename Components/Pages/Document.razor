@@ -1,35 +1,627 @@
 ﻿@page "/Document"
-<PageTitle>文件 (Document)</PageTitle>
+@using HWDPortalMaui.Services
+@using Microsoft.Maui.ApplicationModel
+@using Microsoft.Extensions.Logging
+@inject UserInfoService _userInfoService
+@inject DocumentService DocSvc // 注入文件服務
+@inject ILogger<Document> Logger // 注入日誌服務
+@inject IJSRuntime JSRuntime // 注入 JS 執行環境
 
-<div class="construction-container">
-    <div class="construction-content">
-        <div class="construction-icon">
-            🚧
-        </div>
-        <h2 class="construction-title">頁面施工中</h2>
-        <div class="construction-subtitle">
-            文件 (Document) 功能正在開發中
-        </div>
-        <div class="progress-bar">
-            <div class="progress-fill"></div>
-        </div>
-        <div class="construction-message">
-            <p>我們正在努力完善這個頁面，請稍後再來查看</p>
-            <div class="dots-loading">
-                <span></span>
-                <span></span>
-                <span></span>
+@* 篩選條件區塊 *@
+<div class="row mb-3 g-2">
+    <div class="col-lg-12">
+        <div class="card shadow-sm h-100">
+            <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                <span>
+                    <i class="bi bi-funnel-fill me-2"></i>篩選條件
+                </span>
+                @* 當使用者為 Admin 時，顯示管理按鈕 *@
+                @if (IsAdmin)
+                {
+                    <button class="btn btn-primary btn-sm" @onclick="OpenManageModal">管理</button>
+                }
+            </div>
+            <div class="card-body py-2">
+                <div class="row g-2">
+                    @* 年份選擇 *@
+                    <div class="col-md-3">
+                        <label for="year-select" class="form-label mb-1 small">選擇年份：</label>
+                        @* @bind 改為 @bind:set 以觸發篩選 *@
+                        <select id="year-select" class="form-select form-select-sm" @bind="SelectedYear">
+                            @if (YearList.Any())
+                            {
+                                @foreach (var year in YearList)
+                                {
+                                    <option value="@year">@year</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                    @* Source 選擇 *@
+                    <div class="col-md-3">
+                        <label for="source-select" class="form-label mb-1 small">資料來源：</label>
+                        @* @bind 改為 @bind:set 以觸發篩選 *@
+                        <select id="source-select" class="form-select form-select-sm" @bind="SelectedSource">
+                            @if (SourceList.Any())
+                            {
+                                @foreach (var source in SourceList)
+                                {
+                                    <option value="@source">@source</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                    @* Platform 選擇 *@
+                    <div class="col-md-3">
+                        <label for="platform-select" class="form-label mb-1 small">Platform：</label>
+                        @* @bind 改為 @bind:set 以觸發篩選 *@
+                        <select id="platform-select" class="form-select form-select-sm" @bind="SelectedPlatform">
+                            @if (PlatformList.Any())
+                            {
+                                @foreach (var platform in PlatformList)
+                                {
+                                    <option value="@platform">@platform</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                    @* Version 選擇 *@
+                    <div class="col-md-3">
+                        <label for="version-select" class="form-label mb-1 small">Version：</label>
+                        @* @bind 改為 @bind:set 以觸發篩選 *@
+                        <select id="version-select" class="form-select form-select-sm" @bind="SelectedVersion">
+                            @if (VersionList.Any())
+                            {
+                                @foreach (var version in VersionList)
+                                {
+                                    <option value="@version">@version</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
+@* 主要內容顯示區塊，加入載入中、無資料等狀態判斷 *@
+<div class="card shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-card-list me-2"></i>文件資訊</span>
+        <small class="text-muted">顯示 @(filteredDocuments?.Count ?? 0) / @(allDocuments?.Count ?? 0) 個文件</small>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-striped table-hover mb-0">
+            <thead class="thead-dark">
+                <tr>
+                    <th style="width: 40%;">File Name</th>
+                    <th style="width: 15%;">Source</th>
+                    <th style="width: 15%;">Platform</th>
+                    <th style="width: 15%;">Version</th>
+                    <th style="width: 15%;">Upload Time</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (isLoading)
+                {
+                    <tr>
+                        <td colspan="5" class="text-center p-5">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2">文件載入中...</p>
+                        </td>
+                    </tr>
+                }
+                else if (filteredDocuments == null || !filteredDocuments.Any())
+                {
+                    <tr>
+                        <td colspan="5" class="text-center p-5">
+                            <i class="bi bi-inbox text-muted" style="font-size: 3rem;"></i>
+                            <p class="mt-2 text-muted">找不到符合條件的文件。</p>
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var doc in filteredDocuments)
+                    {
+                        <tr>
+                            <td>
+                                <a href="#" @onclick="() => OpenFile(doc)" @onclick:preventDefault>
+                                    <i class="bi bi-file-earmark-text me-2"></i>@doc.FileName
+                                </a>
+                            </td>
+                            <td>@doc.Source</td>
+                            <td>@doc.Platform</td>
+                            <td>@doc.Version</td>
+                            <td>@doc.UploadTime.ToString("yyyy/MM/dd HH:mm")</td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@* 文件管理的 Modal *@
+@if (showManageModal)
+{
+    <div class="modal fade show" tabindex="-1" style="display: block;" role="dialog">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">文件管理</h5>
+                    <button type="button" class="btn-close" @onclick="CloseManageModal"></button>
+                </div>
+                <div class="modal-body">
+
+                    @* 上傳區塊 *@
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            上傳新文件
+                        </div>
+                        <div class="card-body">
+                            @* 狀態訊息區塊 *@
+                            @if (!string.IsNullOrEmpty(uploadStatusMessage))
+                            {
+                                <div class="alert @(isUploadSuccess ? "alert-success" : "alert-danger")" role="alert">
+                                    @((MarkupString)uploadStatusMessage)
+                                </div>
+                            }
+
+                            @* 檔案資訊輸入欄位 *@
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-3">
+                                    <label class="form-label small">年份</label>
+                                    @* 年份改為使用 Y-2 到 Y+1 列表 *@
+                                    <select class="form-select" @bind="newDocYear">
+                                        @* 迴圈來源改為 UploadYearList *@
+                                        @foreach (var year in UploadYearList)
+                                        {
+                                            <option value="@year">@year</option>
+                                        }
+                                    </select>
+                                </div>
+
+                                <div class="col-md-3">
+                                    <label class="form-label small">Source</label>
+                                    @* 改用 input + datalist 支援手填 *@
+                                    <input class="form-control" list="source-options" @bind="newDocSource" placeholder="-- 請選擇或輸入 Source --" />
+                                    <datalist id="source-options">
+                                        @foreach (var source in ModalSourceList)
+                                        {
+                                            <option value="@source"></option>
+                                        }
+                                    </datalist>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small">Platform</label>
+                                    @* 改用 input + datalist 支援手填 *@
+                                    <input class="form-control" list="platform-options" @bind="newDocPlatform" placeholder="-- 請選擇或輸入 Platform --" />
+                                    <datalist id="platform-options">
+                                        @foreach (var platform in ModalPlatformList)
+                                        {
+                                            <option value="@platform"></option>
+                                        }
+                                    </datalist>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small">Version</label>
+                                    @* Version 使用文字方塊 *@
+                                    <input type="text" class="form-control" @bind="newDocVersion" placeholder="e.g., V1.0" />
+                                </div>
+                            </div>
+
+                            @* 檔案選擇與上傳按鈕 (參照 Bulletin.razor) *@
+                            <div class="input-group">
+                                <InputFile class="form-control" OnChange="HandleFileSelected" multiple />
+                                <button class="btn btn-success" @onclick="UploadDocumentsAsync" disabled="@(isUploading || !selectedFiles.Any() || string.IsNullOrWhiteSpace(newDocSource) || string.IsNullOrWhiteSpace(newDocPlatform) || string.IsNullOrWhiteSpace(newDocVersion))">
+                                    @if (isUploading)
+                                    {
+                                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                        <span> 上傳中...</span>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-upload"></i>
+                                        <span> 上傳</span>
+                                    }
+                                </button>
+                            </div>
+
+                            @* 顯示已選擇的檔案列表 (參照 Bulletin.razor) *@
+                            @if (selectedFiles.Any())
+                            {
+                                <div class="mt-2 text-muted small">
+                                    <p class="mb-1">已選擇 @selectedFiles.Count 個檔案:</p>
+                                    <ul class="list-unstyled mb-0">
+                                        @foreach (var file in selectedFiles)
+                                        {
+                                            <li>- @file.Name (@((file.Size / 1024).ToString("N0")) KB)</li>
+                                        }
+                                    </ul>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    @* 現有文件列表與刪除 *@
+                    <h6>現有文件 (所有年份)</h6>
+                    <div class="table-responsive" style="max-height: 400px;">
+                        <table class="table table-sm table-striped">
+                            <thead>
+                                <tr>
+                                    <th>檔案名稱</th>
+                                    <th>Source</th>
+                                    <th>Platform</th>
+                                    <th>Version</th>
+                                    <th class="text-end">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (allDocuments == null || !allDocuments.Any())
+                                {
+                                    <tr><td colspan="5" class="text-center">目前沒有文件</td></tr>
+                                }
+                                else
+                                {
+                                    @* 顯示所有文件 (allDocuments) 而非篩選後的文件 (filteredDocuments) *@
+                                    @foreach (var item in allDocuments.OrderByDescending(d => d.UploadTime))
+                                    {
+                                        <tr>
+                                            <td class="text-truncate" style="max-width: 250px;">@item.FileName</td>
+                                            <td>@item.Source</td>
+                                            <td>@item.Platform</td>
+                                            <td>@item.Version</td>
+                                            <td class="text-end">
+                                                <button class="btn btn-outline-danger btn-sm" @onclick="() => DeleteDocumentAsync(item)">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseManageModal">關閉</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
 @code {
     [CascadingParameter]
     public MainLayout? Layout { get; set; }
 
-    protected override void OnInitialized()
+    // 供上傳 Modal 使用的年份列表 (Y-2 to Y+1)，自動排序
+    private List<int> UploadYearList
+    {
+        get
+        {
+            int currentYear = DateTime.Now.Year;
+            // 產生 (Y-2), (Y-1), Y, (Y+1) 共 4 個數字
+            return Enumerable.Range(currentYear - 2, 4)
+                             .OrderByDescending(y => y) // 預設由新到舊排序
+                             .ToList();
+        }
+    }
+
+    // 載入狀態
+    private bool isLoading = true;
+
+    // 文件資料列表
+    private List<DocumentItem>? allDocuments;
+    private List<DocumentItem>? filteredDocuments;
+
+    // Modal 相關狀態
+    private bool showManageModal = false;
+    // 定義一個唯讀的管理員清單 (使用 HashSet 效能較佳)
+    private readonly HashSet<string> AdminList = new() { "Chain_Liu", "Yosna_Hsieh", "HankC_Huang", "Sonia_Tsai" };
+    // 新增一個布林屬性，用來判斷目前使用者是否在 AdminList 中
+    private bool IsAdmin => _userInfoService != null && !string.IsNullOrEmpty(_userInfoService.UserName) && AdminList.Contains(_userInfoService.UserName);
+
+    // 篩選條件列表，將在 OnInitializedAsync 中動態載入
+    private List<string> SourceList { get; set; } = new();
+    private List<string> PlatformList { get; set; } = new();
+    private List<string> VersionList { get; set; } = new();
+    // 將 YearList 型別改為 string，以容納 "ALL"
+    private List<string> YearList { get; set; } = new();
+
+    // 給 Modal 內 dropdowns 使用的列表 (移除 "ALL")
+    private List<string> ModalSourceList => SourceList.Where(s => s != "ALL").ToList();
+    private List<string> ModalPlatformList => PlatformList.Where(p => p != "ALL").ToList();
+
+    // 上傳表單的狀態變數
+    private int newDocYear;
+    private string newDocSource = "";
+    private string newDocPlatform = "";
+    private string newDocVersion = "";
+
+    // 上傳流程的狀態變數 (參照 Bulletin.razor)
+    private List<IBrowserFile> selectedFiles = new();
+    private bool isUploading = false;
+    private string? uploadStatusMessage;
+    private bool isUploadSuccess;
+
+    // 已選擇的篩選條件，加入 setter 來觸發篩選
+    private string _selectedSource = "ALL";
+    private string SelectedSource
+    {
+        get => _selectedSource;
+        set { if (_selectedSource != value) { _selectedSource = value; FilterDocuments(); } }
+    }
+
+    private string _selectedPlatform = "ALL";
+    private string SelectedPlatform
+    {
+        get => _selectedPlatform;
+        set { if (_selectedPlatform != value) { _selectedPlatform = value; FilterDocuments(); } }
+    }
+
+    private string _selectedVersion = "ALL";
+    private string SelectedVersion
+    {
+        get => _selectedVersion;
+        set { if (_selectedVersion != value) { _selectedVersion = value; FilterDocuments(); } }
+    }
+
+    // 將 _selectedYear 從 int 改為 string，並預設為 "ALL"
+    private string _selectedYear = "ALL";
+    // 將 SelectedYear 屬性從 int 改為 string
+    private string SelectedYear
+    {
+        get => _selectedYear;
+        set { if (_selectedYear != value) { _selectedYear = value; FilterDocuments(); } }
+    }
+
+
+    // Modal 的控制方法
+    private void OpenManageModal()
+    {
+        // 開啟 Modal 時，清除舊的上傳狀態
+        uploadStatusMessage = null;
+        selectedFiles.Clear();
+        isUploading = false;
+
+        // 設定上傳表單的預設值
+        newDocYear = DateTime.Now.Year; // 預設為今年
+        newDocSource = ModalSourceList.FirstOrDefault() ?? "";
+        newDocPlatform = ModalPlatformList.FirstOrDefault() ?? "";
+        newDocVersion = "";
+
+        showManageModal = true;
+    }
+    private void CloseManageModal() => showManageModal = false;
+
+    // OnInitialized 改為 OnInitializedAsync 以支援非同步操作
+    protected override async Task OnInitializedAsync()
     {
         Layout?.SetPageTitle("文件 (Document)");
+        await LoadDocumentsAsync();
     }
+
+    // 載入文件的核心方法
+    private async Task LoadDocumentsAsync(bool forceReload = false) // forceReload 參數
+    {
+        isLoading = true; 
+        StateHasChanged();
+
+        try
+        {
+            // 傳入 forceReload 參數
+            allDocuments = await DocSvc.GetDocumentsAsync(forceReload);
+            if (allDocuments != null && allDocuments.Any())
+            {
+                SourceList = allDocuments.Select(d => d.Source).Distinct().OrderBy(s => s).ToList();
+                SourceList.Insert(0, "ALL");
+
+                PlatformList = allDocuments.Select(d => d.Platform).Distinct().OrderBy(p => p).ToList(); 
+                PlatformList.Insert(0, "ALL"); 
+
+                VersionList = allDocuments.Select(d => d.Version).Distinct().OrderBy(v => v).ToList(); 
+                VersionList.Insert(0, "ALL"); 
+
+                // 將 Year 轉換為 string 並加入 "ALL"
+                YearList = allDocuments.Select(d => d.Year.ToString()).Distinct().OrderByDescending(y => y).ToList();
+                YearList.Insert(0, "ALL"); // 插入 "ALL" 到列表頂端
+
+                // 確保設定預設值時，列表不是空的
+                if (string.IsNullOrWhiteSpace(_selectedSource) || _selectedSource == "ALL")
+                {
+                    _selectedSource = "ALL";
+                }
+                if (string.IsNullOrWhiteSpace(_selectedPlatform) || _selectedPlatform == "ALL")
+                {
+                    _selectedPlatform = "ALL"; 
+                }
+                if (string.IsNullOrWhiteSpace(_selectedVersion) || _selectedVersion == "ALL")
+                {
+                    _selectedVersion = "ALL";
+                }
+                if (string.IsNullOrWhiteSpace(_selectedYear))
+                {
+                    _selectedYear = "ALL";
+                }
+
+                FilterDocuments();
+            }
+            else
+            {
+                // 如果載入後沒有文件，清空列表
+                allDocuments = new List<DocumentItem>();
+                filteredDocuments = new List<DocumentItem>();
+                SourceList = new List<string> { "ALL" };
+                PlatformList = new List<string> { "ALL" };
+                VersionList = new List<string> { "ALL" };
+                YearList = new List<string> { "ALL" };
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "載入文件時發生錯誤。");
+            allDocuments = new List<DocumentItem>();
+            filteredDocuments = new List<DocumentItem>();
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged(); // 確保 UI 總是更新
+        }
+    }
+
+    // 執行篩選的核心方法
+    private void FilterDocuments()
+    {
+        if (allDocuments == null)
+        {
+            filteredDocuments = new List<DocumentItem>();
+            return;
+        }
+
+        IEnumerable<DocumentItem> query = allDocuments;
+
+        if (SelectedYear != "ALL" && int.TryParse(SelectedYear, out int yearToFilter))
+        {
+            query = query.Where(d => d.Year == yearToFilter);
+        }
+        if (SelectedSource != "ALL")
+        {
+            query = query.Where(d => d.Source.Equals(SelectedSource, StringComparison.OrdinalIgnoreCase));
+        }
+        if (SelectedPlatform != "ALL")
+        {
+            query = query.Where(d => d.Platform.Equals(SelectedPlatform, StringComparison.OrdinalIgnoreCase));
+        }
+        if (SelectedVersion != "ALL")
+        {
+            query = query.Where(d => d.Version.Equals(SelectedVersion, StringComparison.OrdinalIgnoreCase));
+        }
+
+        filteredDocuments = query.ToList();
+    }
+
+    // 開啟檔案的方法
+    private async Task OpenFile(DocumentItem item)
+    {
+        // 呼叫服務以紀錄 "Open" 操作
+        try
+        {
+            await DocSvc.LogOpenFileAsync(item);
+        }
+        catch (Exception ex)
+        {
+            // 紀錄日誌失敗不應阻止檔案開啟，僅在 Logger 記錄錯誤
+            Logger.LogError(ex, "紀錄 [Open] 操作時發生錯誤 (檔案: {FileName})。", item.FileName);
+        }
+        var filePath = item.FileFullPath;
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "此文件沒有關聯的檔案路徑。");
+            return;
+        }
+
+        // MAUI Blazor Hybrid 中，File.Exists 可能無法直接存取網路路徑，
+        // 我們可以直接嘗試開啟，並捕捉例外。
+        try
+        {
+            var openResult = await Launcher.Default.OpenAsync(new OpenFileRequest
+            {
+                File = new ReadOnlyFile(filePath)
+            });
+
+            if (!openResult)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "無法開啟檔案，您的裝置上可能沒有安裝對應的應用程式。");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "開啟檔案 {FilePath} 時發生錯誤。", filePath);
+            await JSRuntime.InvokeVoidAsync("alert", $"開啟檔案時發生預期外的錯誤: {ex.Message}");
+        }
+    }
+    // 處理多檔案選擇事件 (參照 Bulletin.razor)
+    private void HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        selectedFiles = e.GetMultipleFiles(100).ToList();
+        uploadStatusMessage = null; // 清除之前的上傳狀態訊息
+    }
+
+    // 處理多檔案上傳邏輯
+    private async Task UploadDocumentsAsync()
+    {
+        if (!selectedFiles.Any()) return;
+
+        // 調整前端驗證，加入年份檢查
+        if (string.IsNullOrWhiteSpace(newDocSource) || string.IsNullOrWhiteSpace(newDocPlatform) || string.IsNullOrWhiteSpace(newDocVersion))
+        {
+            isUploadSuccess = false;
+            uploadStatusMessage = "錯誤：必須選擇 Source、Platform 並填寫 Version。";
+            return;
+        }
+
+        isUploading = true;
+        uploadStatusMessage = null;
+        var uploadResults = new System.Text.StringBuilder();
+        var successfulUploads = 0;
+
+        StateHasChanged();
+
+        foreach (var file in selectedFiles)
+        {
+            try
+            {
+                // 傳入解析後的 parsedYear
+                await DocSvc.UploadDocumentAsync(newDocYear, newDocSource, newDocPlatform, newDocVersion, file);
+                uploadResults.AppendLine($"檔案 <b>{file.Name}</b> 上傳成功。<br/>");
+                successfulUploads++;
+            }
+            catch (Exception ex)
+            {
+                uploadResults.AppendLine($"檔案 <b>{file.Name}</b> 上傳失敗: {ex.Message}<br/>");
+                Logger.LogError(ex, "檔案 {FileName} 上傳失敗", file.Name);
+            }
+        }
+
+        isUploadSuccess = successfulUploads == selectedFiles.Count;
+        uploadStatusMessage = uploadResults.ToString();
+        selectedFiles.Clear();
+
+        // 如果至少有一個檔案上傳成功，就強制重新整理列表
+        if (successfulUploads > 0)
+        {
+            await LoadDocumentsAsync(forceReload: true);
+        }
+
+        isUploading = false;
+        StateHasChanged();
+    }
+
+    // 處理刪除邏輯
+    private async Task DeleteDocumentAsync(DocumentItem item)
+    {
+        // 使用 JSRuntime 彈出確認對話框 (參照 Bulletin.razor)
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"您確定要刪除檔案「{item.FileName}」嗎？此操作無法復原！");
+        if (confirmed)
+        {
+            try
+            {
+                await DocSvc.DeleteDocumentAsync(item);
+                await LoadDocumentsAsync(forceReload: true); // 強制重新載入列表
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "刪除文件 {FileName} 時發生錯誤。", item.FileName);
+                await JSRuntime.InvokeVoidAsync("alert", "刪除失敗，請查看日誌檔。");
+            }
+        }
+    }
+
 }
