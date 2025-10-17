@@ -18,3 +18,6 @@
     font-size: 0.9rem; /* */
     font-weight: 600; /* */
 }
+.form-label.small {
+    font-weight: 500;
+}

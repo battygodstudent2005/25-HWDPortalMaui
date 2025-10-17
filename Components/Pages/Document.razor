@@ -22,6 +22,23 @@
                 }
             </div>
             <div class="card-body py-2">
+                @* [新增] 搜尋欄位 (參考 Bulletin.razor) *@
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-search"></i></span>
+                            <input type="text" class="form-control" placeholder="依文件名稱 (File Name) 搜尋..."
+                                   @bind="SearchTerm" @bind:event="oninput" />
+                            @if (!string.IsNullOrWhiteSpace(SearchTerm))
+                            {
+                                <button class="btn btn-outline-secondary" @onclick="ClearSearch">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            }
+                        </div>
+                    </div>
+                </div>
+
                 <div class="row g-2">
                     @* 年份選擇 *@
                     <div class="col-md-3">
@@ -99,7 +116,7 @@
                     <th style="width: 15%;">Source</th>
                     <th style="width: 15%;">Platform</th>
                     <th style="width: 15%;">Version</th>
-                    <th style="width: 15%;">Upload Time</th>
+                    <th style="width: 15%;">Year</th>
                 </tr>
             </thead>
             <tbody>
@@ -136,7 +153,7 @@
                             <td>@doc.Source</td>
                             <td>@doc.Platform</td>
                             <td>@doc.Version</td>
-                            <td>@doc.UploadTime.ToString("yyyy/MM/dd HH:mm")</td>
+                            <td>@doc.Year</td>
                         </tr>
                     }
                 }
@@ -380,7 +397,28 @@
         get => _selectedYear;
         set { if (_selectedYear != value) { _selectedYear = value; FilterDocuments(); } }
     }
+    // 搜尋關鍵字 (參考 Bulletin.razor)
+    private string _searchTerm = "";
+    private string SearchTerm
+    {
+        get => _searchTerm;
+        set
+        {
+            // 只有當值真的改變時才更新，避免不必要的重複篩選
+            if (_searchTerm != value)
+            {
+                _searchTerm = value;
+                FilterDocuments(); // 當 SearchTerm 被賦值時，自動呼叫篩選方法
+            }
+        }
+    }
 
+    // 清除搜尋條件的方法
+    private void ClearSearch()
+    {
+        // 透過設定屬性來清空搜尋詞並自動觸發篩選
+        SearchTerm = "";
+    }
 
     // Modal 的控制方法
     private void OpenManageModal()
@@ -487,6 +525,13 @@
 
         IEnumerable<DocumentItem> query = allDocuments;
 
+        // 1. 依據 SearchTerm 執行關鍵字篩選 (篩選 File Name)
+        if (!string.IsNullOrWhiteSpace(SearchTerm))
+        {
+            query = query.Where(d => d.FileName != null && d.FileName.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase));
+        }
+
+        // 2. 接著執行原有的下拉選單篩選
         if (SelectedYear != "ALL" && int.TryParse(SelectedYear, out int yearToFilter))
         {
             query = query.Where(d => d.Year == yearToFilter);

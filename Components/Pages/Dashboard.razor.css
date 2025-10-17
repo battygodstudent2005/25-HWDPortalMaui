@@ -292,7 +292,6 @@
 /* 側邊欄表單樣式 */
 .form-label {
     font-weight: 500;
-    color: #495057;
     margin-bottom: 0.5rem;
 }
 
@@ -531,7 +530,6 @@ border-bottom: none; /* 最後一項移除分隔線 */
 
 /* 緊湊型表單標籤 */
 .form-label.small {
-    font-size: 0.8rem;
     font-weight: 500;
 }
 
