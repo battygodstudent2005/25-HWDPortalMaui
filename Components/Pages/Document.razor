@@ -166,7 +166,7 @@
 @if (showManageModal)
 {
     <div class="modal fade show" tabindex="-1" style="display: block;" role="dialog">
-        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">文件管理</h5>
@@ -205,7 +205,7 @@
                                 <div class="col-md-3">
                                     <label class="form-label small">Source</label>
                                     @* 改用 input + datalist 支援手填 *@
-                                    <input class="form-control" list="source-options" @bind="newDocSource" placeholder="-- 請選擇或輸入 Source --" />
+                                    <input class="form-control" list="source-options" @bind="newDocSource" placeholder="請選擇或輸入 Source" />
                                     <datalist id="source-options">
                                         @foreach (var source in ModalSourceList)
                                         {
@@ -216,7 +216,7 @@
                                 <div class="col-md-3">
                                     <label class="form-label small">Platform</label>
                                     @* 改用 input + datalist 支援手填 *@
-                                    <input class="form-control" list="platform-options" @bind="newDocPlatform" placeholder="-- 請選擇或輸入 Platform --" />
+                                    <input class="form-control" list="platform-options" @bind="newDocPlatform" placeholder="請選擇或輸入 Platform" />
                                     <datalist id="platform-options">
                                         @foreach (var platform in ModalPlatformList)
                                         {
@@ -430,10 +430,9 @@
 
         // 設定上傳表單的預設值
         newDocYear = DateTime.Now.Year; // 預設為今年
-        newDocSource = ModalSourceList.FirstOrDefault() ?? "";
-        newDocPlatform = ModalPlatformList.FirstOrDefault() ?? "";
+        newDocSource = "";
+        newDocPlatform = "";
         newDocVersion = "";
-
         showManageModal = true;
     }
     private void CloseManageModal() => showManageModal = false;
