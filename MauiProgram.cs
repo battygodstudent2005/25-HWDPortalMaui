@@ -44,6 +44,7 @@ namespace HWDPortalMaui
             builder.Services.AddSingleton<UpdateService>();
             builder.Services.AddSingleton<DocumentService>();
             builder.Services.AddSingleton<AIAssistantService>();
+            builder.Services.AddSingleton<SecondSourceService>();
 
 
             return builder.Build();

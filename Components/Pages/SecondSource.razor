@@ -1,13 +1,39 @@
 ﻿@page "/SecondSource"
+@using HWDPortalMaui.Services
+@using Microsoft.Extensions.Logging
+@inject SecondSourceService SecondSourceSvc
+@inject ILogger<SecondSource> Logger
 
-@* 篩選條件區塊 *@
+@* 篩選條件區塊 (結構同 Document.razor) *@
 <div class="row mb-3 g-2">
     <div class="col-lg-12">
         <div class="card shadow-sm h-100">
-            <div class="card-header py-2">
-                <i class="bi bi-funnel-fill me-2"></i>篩選條件
+            @* 使用 .py-2 樣式讓標題更緊湊 *@
+            <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                <span>
+                    <i class="bi bi-funnel-fill me-2"></i>篩選條件
+                </span>
             </div>
             <div class="card-body py-2">
+                @* 搜尋欄位 (參考 Document.razor) *@
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-search"></i></span>
+                            @* 修改 placeholder 文字 *@
+                            <input type="text" class="form-control" placeholder="依 Candidate PN / Main Source MPN / Main Source CPN 搜尋..."
+                                   @bind="SearchTerm" @bind:event="oninput" />
+                            @if (!string.IsNullOrWhiteSpace(SearchTerm))
+                            {
+                                <button class="btn btn-outline-secondary" @onclick="ClearSearch">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                @* 下拉式選單 (使用 .form-label small 樣式) *@
                 <div class="row g-2">
                     @* 年份選擇 *@
                     <div class="col-md-3">
@@ -22,15 +48,41 @@
                             }
                         </select>
                     </div>
-                    @* 元件種類選擇 *@
+                    @* Component Type 選擇 *@
                     <div class="col-md-3">
-                        <label for="component-type-select" class="form-label mb-1 small">選擇元件種類：</label>
+                        <label for="component-type-select" class="form-label mb-1 small">Component Type：</label>
                         <select id="component-type-select" class="form-select form-select-sm" @bind="SelectedComponentType">
                             @if (ComponentTypeList.Any())
                             {
-                                @foreach (var componentType in ComponentTypeList)
+                                @foreach (var item in ComponentTypeList)
                                 {
-                                    <option value="@componentType">@componentType</option>
+                                    <option value="@item">@item</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                    @* Power Department 選擇 *@
+                    <div class="col-md-3">
+                        <label for="power-dept-select" class="form-label mb-1 small">Power Department：</label>
+                        <select id="power-dept-select" class="form-select form-select-sm" @bind="SelectedPowerDepartment">
+                            @if (PowerDepartmentList.Any())
+                            {
+                                @foreach (var item in PowerDepartmentList)
+                                {
+                                    <option value="@item">@item</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                    @* Component Status 選擇 *@
+                    <div class="col-md-3">
+                        <label for="component-status-select" class="form-label mb-1 small">Component Status：</label>
+                        <select id="component-status-select" class="form-select form-select-sm" @bind="SelectedComponentStatus">
+                            @if (ComponentStatusList.Any())
+                            {
+                                @foreach (var item in ComponentStatusList)
+                                {
+                                    <option value="@item">@item</option>
                                 }
                             }
                         </select>
@@ -41,20 +93,149 @@
     </div>
 </div>
 
-@* 主要內容顯示區 (空殼) *@
+@* 主要內容顯示區塊 *@
 <div class="row">
     <div class="col-lg-12">
         <div class="card shadow-sm">
-            <div class="card-header">
-                <i class="bi bi-card-list me-2"></i>替代料資訊
+
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-card-list me-2"></i>替代料資訊</span>
+                <small class="text-muted">顯示 @(filteredItems?.Count ?? 0) / @(allSecondSourceItems?.Count ?? 0) 筆資料</small>
             </div>
-            <div class="card-body" style="min-height: 500px;">
-                @* 之後的資料表格或內容將會放在這裡 *@
-                <div class="text-center p-5">
-                    <i class="bi bi-inbox text-muted" style="font-size: 3rem;"></i>
-                    <p class="mt-2 text-muted">請選擇篩選條件以顯示資料。</p>
+
+            @* 改善的 table-responsive 區塊 *@
+            <div class="table-responsive" style="max-height: 70vh; overflow-y: auto;">
+                <table class="table table-striped table-hover table-sm mb-0 second-source-table">
+                    <thead class="table-light sticky-top">
+                        <tr>
+                            <th class="text-center" style="min-width: 60px;">ID</th>
+                            <th style="min-width: 140px;">Candidate PN</th>
+                            <th style="min-width: 130px;">Candidate Vender</th>
+                            <th style="min-width: 100px;">Date.</th>
+                            <th style="min-width: 140px;">Component Status</th>
+                            <th style="min-width: 140px;">Main Source MPN</th>
+                            <th style="min-width: 140px;">Main Source CPN</th>
+                            <th style="min-width: 160px;">Component Substitute Mode</th>
+                            <th style="min-width: 140px;">Power Department</th>
+                            <th style="min-width: 130px;">Component Type</th>
+                            <th style="min-width: 120px;">EV-Kit Report</th>
+                            <th style="min-width: 180px;">Test MB of Main Source</th>
+                            <th style="min-width: 180px;">2nd Source Real MB EA Report</th>
+                            <th style="min-width: 160px;">Power FM/DM Comments</th>
+                            <th style="min-width: 150px;">Application Area (asc)</th>
+                            <th style="min-width: 150px;">Application Area (VE only)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (isLoading)
+                        {
+                            <tr>
+                                <td colspan="16" class="text-center p-5">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <p class="mt-2 mb-0">資料載入中...</p>
+                                </td>
+                            </tr>
+                        }
+                        else if (filteredItems == null || !filteredItems.Any())
+                        {
+                            <tr>
+                                <td colspan="16" class="text-center p-5">
+                                    <i class="bi bi-inbox text-muted" style="font-size: 3rem;"></i>
+                                    <p class="mt-2 mb-0 text-muted">找不到符合條件的替代料資訊。</p>
+                                    @if (!string.IsNullOrWhiteSpace(SearchTerm) ||
+                                                                    SelectedYear != "ALL" ||
+                                                                    SelectedComponentType != "ALL" ||
+                                                                    SelectedPowerDepartment != "ALL" ||
+                                                                    SelectedComponentStatus != "ALL")
+                                    {
+                                        <small class="text-muted d-block mt-2">
+                                            <i class="bi bi-info-circle me-1"></i>請嘗試調整篩選條件
+                                        </small>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var item in filteredItems)
+                            {
+                                <tr>
+                                    <td class="text-center">
+                                        <span class="badge bg-light text-dark border">@item.Id</span>
+                                    </td>
+                                    <td class="fw-semibold text-primary">@item.CandidatePN</td>
+                                    <td>@item.CandidateVender</td>
+                                    <td class="text-muted">@item.Date</td>
+                                    <td>
+                                        @if (!string.IsNullOrWhiteSpace(item.ComponentStatus))
+                                        {
+                                            // 根據狀態動態決定 badge 顏色
+                                            <span class="badge @GetComponentStatusClass(item.ComponentStatus)" title="@item.ComponentStatus">
+                                                @TruncateText(item.ComponentStatus, 15)
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">-</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <span class="font-monospace text-dark bg-light px-2 py-1 rounded">@(item.MainSourceMPN ?? "-")</span>
+                                    </td>
+                                    <td>
+                                        <span class="font-monospace text-dark bg-light px-2 py-1 rounded">@(item.MainSourceCPN ?? "-")</span>
+                                    </td>
+                                    <td title="@item.ComponentSubstituteMode">
+                                        @TruncateText(item.ComponentSubstituteMode, 20)
+                                    </td>
+                                    <td>
+                                        @if (!string.IsNullOrWhiteSpace(item.PowerDepartment))
+                                        {
+                                            <span class="badge bg-secondary">@item.PowerDepartment</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">-</span>
+                                        }
+                                    </td>
+                                    <td>@(item.ComponentType ?? "-")</td>
+                                    <td title="@item.EVKitReport">
+                                        @TruncateText(item.EVKitReport, 15)
+                                    </td>
+                                    <td title="@item.TestMBOfMainSource">
+                                        @TruncateText(item.TestMBOfMainSource, 20)
+                                    </td>
+                                    <td title="@item.SecondSourceRealMBEAReport">
+                                        @TruncateText(item.SecondSourceRealMBEAReport, 20)
+                                    </td>
+                                    <td title="@item.PowerFMDMComments">
+                                        @TruncateText(item.PowerFMDMComments, 20)
+                                    </td>
+                                    <td title="@item.ApplicationAreaAsc">
+                                        @TruncateText(item.ApplicationAreaAsc, 20)
+                                    </td>
+                                    <td title="@item.ApplicationAreaTxt">
+                                        @TruncateText(item.ApplicationAreaTxt, 20)
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            @* 可選：加入分頁或底部資訊列 *@
+            @if (filteredItems != null && filteredItems.Any())
+            {
+                <div class="card-footer text-muted py-2">
+                    <small>
+                        <i class="bi bi-info-circle me-1"></i>
+                        提示：將滑鼠移至截斷文字上可查看完整內容
+                    </small>
                 </div>
-            </div>
+            }
         </div>
     </div>
 </div>
@@ -64,31 +245,237 @@
     [CascadingParameter]
     public MainLayout? Layout { get; set; }
 
-    // 年份列表
-    private List<int> YearList { get; set; } = new List<int>();
-    private int SelectedYear { get; set; }
+    // 載入狀態
+    private bool isLoading = true;
+    // 用於顯示的資料列表
+    private List<SecondSourceItem>? allSecondSourceItems; // 儲存所有資料
+    private List<SecondSourceItem>? filteredItems; // 儲存篩選後的資料
 
-    // 元件種類列表
-    private List<string> ComponentTypeList { get; set; } = new List<string> { "ALL", "IC", "MOS" };
-    private string? SelectedComponentType { get; set; }
+    // 篩選條件列表
+    private List<string> YearList { get; set; } = new();
+    private List<string> ComponentTypeList { get; set; } = new();
+    private List<string> PowerDepartmentList { get; set; } = new();
+    private List<string> ComponentStatusList { get; set; } = new();
 
-    protected override void OnInitialized()
+    // 搜尋關鍵字 (參考 Document.razor)
+    private string _searchTerm = "";
+    private string SearchTerm
     {
-        // 設定頁面標題
-        Layout?.SetPageTitle("替代料 (Second Source)");
-
-        // 初始化年份列表 (yyyy-2 ~ yyyy+1)
-        int currentYear = DateTime.Now.Year;
-        int startYear = currentYear + 1;
-        int endYear = currentYear - 2;
-
-        for (int year = startYear; year >= endYear; year--)
+        get => _searchTerm;
+        set
         {
-            YearList.Add(year);
+            if (_searchTerm != value)
+            {
+                _searchTerm = value;
+                FilterData(); // 當 SearchTerm 被賦值時，自動呼叫篩選方法
+            }
+        }
+    }
+
+    // 已選擇的篩選條件 (參考 Document.razor)
+    private string _selectedYear = "ALL";
+    private string SelectedYear
+    {
+        get => _selectedYear;
+        set { if (_selectedYear != value) { _selectedYear = value; FilterData(); } }
+    }
+
+    private string _selectedComponentType = "ALL";
+    private string SelectedComponentType
+    {
+        get => _selectedComponentType;
+        set { if (_selectedComponentType != value) { _selectedComponentType = value; FilterData(); } }
+    }
+
+    private string _selectedPowerDepartment = "ALL";
+    private string SelectedPowerDepartment
+    {
+        get => _selectedPowerDepartment;
+        set { if (_selectedPowerDepartment != value) { _selectedPowerDepartment = value; FilterData(); } }
+    }
+
+    private string _selectedComponentStatus = "ALL";
+    private string SelectedComponentStatus
+    {
+        get => _selectedComponentStatus;
+        set { if (_selectedComponentStatus != value) { _selectedComponentStatus = value; FilterData(); } }
+    }
+
+
+    // OnInitializedAsync 保持不變 (僅載入資料)
+    protected override async Task OnInitializedAsync()
+    {
+        Layout?.SetPageTitle("替代料 (Second Source)");
+        await LoadDataAsync();
+    }
+
+    // 清除搜尋條件的方法 (參考 Document.razor)
+    private void ClearSearch()
+    {
+        SearchTerm = "";
+    }
+
+    // LoadDataAsync (現在需要填充篩選器並執行初始篩選)
+    private async Task LoadDataAsync()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            // 資料載入到 allSecondSourceItems
+            allSecondSourceItems = await SecondSourceSvc.GetSecondSourceItemsAsync();
+
+            // 邏輯參考 Document.razor
+            if (allSecondSourceItems != null && allSecondSourceItems.Any())
+            {
+                // 填充篩選器列表 (處理 null 或空字串)
+                // 年份 (Year 是 int?，且我們在 SQL 中用了 LEFT([Date.], 4)，所以用 Year 欄位)
+                YearList = allSecondSourceItems
+                    .Select(d => d.Year?.ToString() ?? "N/A") // 將 null 年份歸類為 N/A
+                    .Distinct()
+                    .OrderByDescending(y => y == "ALL" ? 0 : (y == "N/A" ? -1 : (int.TryParse(y, out int yr) ? yr : -2))) // 複雜排序：ALL > 2024 > 2023 > N/A
+                    .ToList();
+                YearList.Insert(0, "ALL");
+
+                ComponentTypeList = allSecondSourceItems
+                    .Select(d => string.IsNullOrWhiteSpace(d.ComponentType) ? "N/A" : d.ComponentType)
+                    .Distinct()
+                    .OrderBy(s => s)
+                    .ToList();
+                ComponentTypeList.Insert(0, "ALL");
+
+                PowerDepartmentList = allSecondSourceItems
+                    .Select(d => string.IsNullOrWhiteSpace(d.PowerDepartment) ? "N/A" : d.PowerDepartment)
+                    .Distinct()
+                    .OrderBy(s => s)
+                    .ToList();
+                PowerDepartmentList.Insert(0, "ALL");
+
+                ComponentStatusList = allSecondSourceItems
+                    .Select(d => string.IsNullOrWhiteSpace(d.ComponentStatus) ? "N/A" : d.ComponentStatus)
+                    .Distinct()
+                    .OrderBy(s => s)
+                    .ToList();
+                ComponentStatusList.Insert(0, "ALL");
+
+                // 執行初始篩選
+                FilterData();
+            }
+            else
+            {
+                // 如果載入後沒有文件，清空列表
+                allSecondSourceItems = new List<SecondSourceItem>();
+                filteredItems = new List<SecondSourceItem>();
+                YearList = new List<string> { "ALL" };
+                ComponentTypeList = new List<string> { "ALL" };
+                PowerDepartmentList = new List<string> { "ALL" };
+                ComponentStatusList = new List<string> { "ALL" };
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "載入替代料 (Second Source) 時發生錯誤。");
+            // 清空列表
+            allSecondSourceItems = new List<SecondSourceItem>();
+            filteredItems = new List<SecondSourceItem>();
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    // 執行篩選的核心方法 (參考 Document.razor 的 FilterDocuments)
+    private void FilterData()
+    {
+        if (allSecondSourceItems == null)
+        {
+            filteredItems = new List<SecondSourceItem>();
+            return;
         }
 
-        // 設定預設篩選值
-        SelectedYear = currentYear;
-        SelectedComponentType = ComponentTypeList.FirstOrDefault();
+        IEnumerable<SecondSourceItem> query = allSecondSourceItems;
+
+        // 1. 依據 SearchTerm 執行關鍵字篩選
+        if (!string.IsNullOrWhiteSpace(SearchTerm))
+        {
+            query = query.Where(d =>
+                (d.CandidatePN != null && d.CandidatePN.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)) ||
+                (d.MainSourceMPN != null && d.MainSourceMPN.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)) ||
+                (d.MainSourceCPN != null && d.MainSourceCPN.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase))
+            );
+        }
+
+        // 2. 接著執行原有的下拉選單篩選
+        if (SelectedYear != "ALL")
+        {
+            // 處理 "N/A" 的情況
+            if (SelectedYear == "N/A")
+                query = query.Where(d => d.Year == null);
+            else if (int.TryParse(SelectedYear, out int yearToFilter))
+                query = query.Where(d => d.Year == yearToFilter);
+        }
+
+        if (SelectedComponentType != "ALL")
+        {
+            if (SelectedComponentType == "N/A")
+                query = query.Where(d => string.IsNullOrWhiteSpace(d.ComponentType));
+            else
+                query = query.Where(d => d.ComponentType == SelectedComponentType);
+        }
+
+        if (SelectedPowerDepartment != "ALL")
+        {
+            if (SelectedPowerDepartment == "N/A")
+                query = query.Where(d => string.IsNullOrWhiteSpace(d.PowerDepartment));
+            else
+                query = query.Where(d => d.PowerDepartment == SelectedPowerDepartment);
+        }
+
+        if (SelectedComponentStatus != "ALL")
+        {
+            if (SelectedComponentStatus == "N/A")
+                query = query.Where(d => string.IsNullOrWhiteSpace(d.ComponentStatus));
+            else
+                query = query.Where(d => d.ComponentStatus == SelectedComponentStatus);
+        }
+
+        filteredItems = query.OrderBy(item => item.Id).ToList();
+    }
+    // 根據 Component Status 決定 Badge 樣式的輔助方法
+    private string GetComponentStatusClass(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status))
+        {
+            return "bg-info bg-opacity-25 text-dark";
+        }
+
+        // 檢查是否包含 "reject" 關鍵字
+        if (status.Contains("reject", StringComparison.OrdinalIgnoreCase))
+        {
+            return "bg-danger bg-opacity-25 text-dark";
+        }
+
+        // 檢查是否包含 "done" 關鍵字
+        if (status.Contains("done", StringComparison.OrdinalIgnoreCase))
+        {
+            return "bg-success bg-opacity-25 text-dark";
+        }
+
+        // 預設樣式（淺藍色）
+        return "bg-info bg-opacity-25 text-dark";
+    }
+    // 文字截斷輔助方法
+    private string TruncateText(string? text, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return "-";
+
+        if (text.Length <= maxLength)
+            return text;
+
+        return text.Substring(0, maxLength) + "...";
     }
 }

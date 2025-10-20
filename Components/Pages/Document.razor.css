@@ -1,23 +1,114 @@
 ﻿/* 卡片樣式改善 */
 .card.shadow-sm {
-    box-shadow: 0 2px 4px rgba(0,0,0,0.08); /* */
+    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
 }
 
 .card-header {
-    background-color: #f8f9fa; /* */
-    border-bottom: 1px solid #dee2e6; /* */
-    font-weight: 600; /* */
-    color: #495057; /* */
-    padding: 0.75rem 1rem; /* */
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    font-weight: 600;
+    color: #495057;
+    padding: 0.75rem 1rem;
 }
 
-/* 緊湊型卡片頭部 (與 Dashboard 的篩選條件區塊風格一致) */
-.card-header.py-2 {
-    padding-top: 0.5rem !important; /* */
-    padding-bottom: 0.5rem !important; /* */
-    font-size: 0.9rem; /* */
-    font-weight: 600; /* */
-}
+    /* 緊湊型卡片頭部 (與 Dashboard 的篩選條件區塊風格一致) */
+    .card-header.py-2 {
+        padding-top: 0.5rem !important;
+        padding-bottom: 0.5rem !important;
+        font-size: 0.9rem;
+        font-weight: 600;
+    }
+
 .form-label.small {
     font-weight: 500;
+}
+
+/* === Second Source 表格優化樣式 === */
+
+/* 固定表頭樣式 */
+.second-source-table thead.sticky-top {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.second-source-table thead th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    font-size: 0.875rem;
+    padding: 0.75rem 0.5rem;
+    white-space: nowrap;
+    vertical-align: middle;
+    border-bottom: 2px solid #dee2e6;
+}
+
+/* 表格內容樣式 - 統一字體大小 */
+.second-source-table tbody td {
+    padding: 0.6rem 0.5rem;
+    vertical-align: middle;
+    font-size: 0.875rem; /* 統一字體大小 */
+    line-height: 1.5;
+}
+
+/* 滑鼠懸停效果增強 */
+.second-source-table tbody tr:hover {
+    background-color: #f0f8ff;
+    transition: background-color 0.2s ease;
+}
+
+/* 文字截斷與 tooltip */
+.second-source-table tbody td[title] {
+    cursor: help;
+}
+
+/* Badge 樣式調整 - 統一大小 */
+.second-source-table .badge {
+    font-weight: 500;
+    padding: 0.35em 0.65em;
+    font-size: 0.875rem; /* 與表格字體大小一致 */
+    line-height: 1.5;
+}
+
+/* 等寬字體樣式 (用於料號) - 移除 code 標籤改用 font-monospace */
+.second-source-table .font-monospace {
+    font-size: 0.875rem; /* 與表格字體大小一致 */
+    font-family: 'Courier New', Courier, monospace;
+}
+
+/* 響應式優化 */
+@media (max-width: 768px) {
+    .second-source-table {
+        font-size: 0.8rem;
+    }
+
+        .second-source-table thead th {
+            font-size: 0.75rem;
+            padding: 0.5rem 0.3rem;
+        }
+
+        .second-source-table tbody td {
+            padding: 0.5rem 0.3rem;
+            font-size: 0.8rem; /* 小螢幕也統一 */
+        }
+
+        .second-source-table .badge {
+            font-size: 0.8rem;
+        }
+
+        .second-source-table .font-monospace {
+            font-size: 0.8rem;
+        }
+}
+
+/* 空白狀態樣式 */
+.second-source-table tbody td.text-center i.bi-inbox {
+    opacity: 0.3;
+}
+
+/* 卡片底部資訊列 */
+.card-footer {
+    background-color: #f8f9fa;
+    border-top: 1px solid #dee2e6;
+    font-size: 0.85rem;
 }

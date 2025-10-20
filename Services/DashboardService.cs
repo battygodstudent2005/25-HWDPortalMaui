@@ -27,10 +27,10 @@ namespace HWDPortalMaui.Services
             return _configuration.GetConnectionString(key);
         }
 
-        // [修改] 將 ReadSQLdata 方法移至服務中
+        // 將 ReadSQLdata 方法移至服務中
         public async Task<(DataTable data, DateTime queryTime)> ReadSQLdataAsync(string readsheet)
         {
-            var connetionString = GetConnectionString("ReadConnection"); // [修改] 從組態檔取得連線字串
+            var connetionString = GetConnectionString("ReadConnection"); // 從組態檔取得連線字串
             if (string.IsNullOrEmpty(connetionString))
             {
                 _logger.LogError("找不到 'ReadConnection' 連線字串。");
@@ -81,7 +81,7 @@ namespace HWDPortalMaui.Services
         {
             if (modifiedData == null || modifiedData.Rows.Count == 0) return 0;
 
-            string connectionString = GetConnectionString("WriteConnection"); // [修改] 使用具備寫入權限的連線字串
+            string connectionString = GetConnectionString("WriteConnection"); // 使用具備寫入權限的連線字串
             if (string.IsNullOrEmpty(connectionString))
             {
                 _logger.LogError("找不到 'WriteConnection' 連線字串。");
@@ -99,7 +99,7 @@ namespace HWDPortalMaui.Services
                 {
                     using (SqlCommand cmd = new SqlCommand(mergeCommandText, conn))
                     {
-                        // [修改] 新增參數
+                        // 新增參數
                         cmd.Parameters.AddWithValue("@Division", row["Division"]);
                         cmd.Parameters.AddWithValue("@Department", row["Department"]);
                         cmd.Parameters.AddWithValue("@ProjectCode", row["ProjectCode"]);
