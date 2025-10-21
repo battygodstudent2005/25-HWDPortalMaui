@@ -39,12 +39,14 @@ namespace HWDPortalMaui
             builder.Logging.AddDebug();
 #endif
 
+            builder.Services.AddHttpClient();
             builder.Services.AddSingleton<UserInfoService>();
             builder.Services.AddSingleton<BulletinService>();
             builder.Services.AddSingleton<UpdateService>();
             builder.Services.AddSingleton<DocumentService>();
             builder.Services.AddSingleton<AIAssistantService>();
             builder.Services.AddSingleton<SecondSourceService>();
+            builder.Services.AddSingleton<EmailService>();
 
 
             return builder.Build();

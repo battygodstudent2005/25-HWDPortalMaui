@@ -68,40 +68,46 @@
     min-width: 1200px; /* 確保表格有最小寬度以容納所有欄位 */
 }
 
-    .table td, .table th {
-        vertical-align: middle;
-        padding: 0.5rem 0.75rem;
-        border-color: #dee2e6;
-        white-space: nowrap;
-        text-align: center;
+.table td, .table th {
+    vertical-align: middle;
+    padding: 0.5rem 0.75rem;
+    border-color: #dee2e6;
+    white-space: nowrap;
+    text-align: center;
+}
+
+/* 針對第一欄設定樣式，將寬度鎖定 */
+.table th:nth-child(1),
+.table td:nth-child(1) {
+    text-align: left;
+    width: 130px; /* 設定固定寬度 */
+    min-width: 130px; /* 設定最小寬度 */
+    max-width: 130px; /* 設定最大寬度以確保鎖定 */
+    background-color: #f8f9fa;
+    font-weight: 600;
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    border-right: 2px solid #dee2e6;
+}
+
+    /* 調整第二欄的黏貼位置 */
+    .table th:nth-child(2),
+    .table td:nth-child(2) {
+        text-align: left;
+        min-width: 120px; /* 第二欄的最小寬度維持 120px */
+        max-width: 400px; /* 設定最大寬度以確保鎖定 */
+        background-color: #f8f9fa;
+        position: sticky;
+        left: 130px; /* [重要] 這個值必須等於第一欄的寬度 */
+        z-index: 2;
+        border-right: 2px solid #dee2e6;
+        /* [新增] 隱藏超出 max-width 的內容 */
+        overflow: hidden;
+        /* [新增] 將被隱藏的內容顯示為 ... */
+        text-overflow: ellipsis;
+        /* 備註: white-space: nowrap; 已在 .table td, .table th 中全域設定，此處不需重複 */
     }
-
-        /* 針對第一欄設定樣式，將寬度鎖定 */
-        .table th:nth-child(1),
-        .table td:nth-child(1) {
-            text-align: left;
-            width: 130px; /* 設定固定寬度 */
-            min-width: 130px; /* 設定最小寬度 */
-            max-width: 130px; /* 設定最大寬度以確保鎖定 */
-            background-color: #f8f9fa;
-            font-weight: 600;
-            position: sticky;
-            left: 0;
-            z-index: 2;
-            border-right: 2px solid #dee2e6;
-        }
-
-        /* 調整第二欄的黏貼位置 */
-        .table th:nth-child(2),
-        .table td:nth-child(2) {
-            text-align: left;
-            min-width: 120px; /* 第二欄的最小寬度維持 120px */
-            background-color: #f8f9fa;
-            position: sticky;
-            left: 130px; /* [重要] 這個值必須等於第一欄的寬度 */
-            z-index: 2;
-            border-right: 2px solid #dee2e6;
-        }
 
 /* 固定表頭樣式 */
 .sticky-header th {

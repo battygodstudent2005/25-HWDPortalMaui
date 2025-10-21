@@ -15,16 +15,13 @@
                 <span>
                     <i class="bi bi-funnel-fill me-2"></i>篩選條件
                 </span>
-                @* 當使用者為 Admin 時，顯示管理按鈕 *@
-                @if (IsAdmin)
-                {
-                    <button class="btn btn-primary btn-sm" @onclick="OpenManageModal">管理</button>
-                }
             </div>
             <div class="card-body py-2">
-                @* [新增] 搜尋欄位 (參考 Bulletin.razor) *@
-                <div class="row mb-3">
-                    <div class="col-md-12">
+                @* 搜尋欄位 (參考 Bulletin.razor) *@
+                @* 加入 align-items-center *@
+                <div class="row mb-3 align-items-center">
+                    @* 從 col-md-12 改為 col-md-8 *@
+                    <div class="col-md-8">
                         <div class="input-group">
                             <span class="input-group-text"><i class="bi bi-search"></i></span>
                             <input type="text" class="form-control" placeholder="依文件名稱 (File Name) 搜尋..."
@@ -34,6 +31,15 @@
                                 <button class="btn btn-outline-secondary" @onclick="ClearSearch">
                                     <i class="bi bi-x-lg"></i>
                                 </button>
+                            }
+                        </div>
+                    </div>
+                    @* 管理按鈕區塊 (參考 Bulletin.razor) *@
+                    <div class="col-md-4">
+                        <div class="d-flex justify-content-end align-items-center">
+                            @if (IsAdmin)
+                            {
+                                <button class="btn btn-primary btn-sm" @onclick="OpenManageModal">管理</button>
                             }
                         </div>
                     </div>

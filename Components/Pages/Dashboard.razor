@@ -10,6 +10,8 @@
 @inject IConfiguration _configuration
 @using System.Text.RegularExpressions
 @using System.IO
+@using HWDPortalMaui.Services
+@inject EmailService MailSvc
 
 
 @* 當 isProjectInfoMaximized 為 true 時，這個區塊會被隱藏 *@
@@ -52,10 +54,29 @@
                 <i class="bi bi-gear-fill me-2"></i>操作設定
             </div>
             <div class="card-body py-2">
+
                 <div class="d-grid gap-1">
                     <button class="btn btn-info btn-sm" @onclick="OpenAddProjectModal" disabled="@(!(_userInfoService.UserRole == "DM" || _userInfoService.UserRole == "FM"))" title="@((_userInfoService.UserRole == "DM" || _userInfoService.UserRole == "FM") ? "新增專案" : "您的權限不足，無法新增專案")">
                         <i class="bi bi-plus-circle me-1"></i>新增專案資訊
                     </button>
+
+                    @* 只有管理員才看得到的發送狀態按鈕 *@
+                    @if (IsAdmin)
+                    {
+                        @* [修改] 增加 disabled 狀態和載入動畫 *@
+                        <button class="btn btn-warning btn-sm" @onclick="SendProjectStatus" disabled="@isSendingStatus">
+                            @if (isSendingStatus)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                                <span>發送中...</span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-send me-1"></i>
+                                <span>發送專案Status</span>
+                            }
+                        </button>
+                    }
                 </div>
             </div>
         </div>
@@ -369,6 +390,7 @@
                                 </div>
                                 <div class="card-body">
                                     <div class="mb-3">
+                                        <label for="personDL" class="form-label">專案經理 (DM)</label>
                                         <input type="text" id="personDM" class="form-control" @bind="projectPersonnel.DM" placeholder="請輸入 AD Account(例如 Chain_Liu)" disabled="@(!(_userInfoService.UserRole == "DM" || _userInfoService.UserRole == "FM"))" />
                                     </div>
 
@@ -573,6 +595,14 @@
     [CascadingParameter] 
     public MainLayout? Layout { get; set; }
 
+    // 用於追蹤 "發送專案Status" 按鈕的載入狀態
+    private bool isSendingStatus = false;
+
+    // 義一個唯讀的管理員清單 (參照 Bulletin.razor)
+    private readonly HashSet<string> AdminList = new() { "Chain_Liu" };
+    // 新增一個布林屬性，用來判斷目前使用者是否在 AdminList 中
+    private bool IsAdmin => _userInfoService != null && !string.IsNullOrEmpty(_userInfoService.UserName) && AdminList.Contains(_userInfoService.UserName);
+
     // 用於追蹤專案資訊卡片是否最大化的狀態旗標
     private bool isProjectInfoMaximized = false;
 
@@ -642,6 +672,375 @@
     {
         isOverdueFilterActive = !isOverdueFilterActive; // 切換啟用狀態
         ApplyFilter(); // 重新套用所有篩選條件
+    }
+
+    // 發送專案 Status 的方法
+    private async Task SendProjectStatus()
+    {
+        isSendingStatus = true;
+        StateHasChanged();
+
+        try
+        {
+            // === 根據部門設定收件人 ===
+            string toAddresses = GetRecipientsByDepartment(SelectedHwOption);
+            string ccAddresses = GetCCRecipientsByDepartment(SelectedHwOption);
+
+            if (string.IsNullOrEmpty(toAddresses))
+            {
+                await JSRuntime.InvokeVoidAsync("showToast", "未設定該部門的收件人，無法發送郵件。", "warning");
+                return;
+            }
+
+            // === 準備郵件基本資訊 ===
+            string apiKey = _configuration["EmailService:ApiKey"] ?? "0d4b49c142cddd791648892f52650d1a6f1ea3e5";
+            string fromAddress = "HWD_Automation@compal.com";
+            string mailSubject = $"[HWD_{SelectedHwOption}] {SelectedYear}年度 SOW執行狀況更新 ({DateTime.Now:yyyy/MM/dd HH:mm})";
+
+            // === 產生專案狀態統計資訊（使用 filteredData）===
+            var statusSummary = CalculateStatusSummary();
+
+            int totalProjects = GetProjectCount(projectData);
+            int displayedProjects = GetProjectCount(filteredData);
+
+            // === 產生專案詳細資訊表格 ===
+            string projectDetailsTable = GenerateProjectDetailsTable();
+
+            // === 組合完整的郵件內容 ===
+            string mailBody = $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset=""UTF-8"">
+</head>
+<body style=""font-family: Calibri, 'Microsoft JhengHei', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f8f9fa;"">
+
+    <!-- Header -->
+    <table width=""100%"" cellpadding=""0"" cellspacing=""0"" style=""background-color: #0d6efd; color: white; padding: 20px;"">
+        <tr>
+            <td style=""text-align: center; font-family: Calibri, Arial, sans-serif;"">
+                <h2 style=""margin: 0; padding: 10px 0; font-family: Calibri, Arial, sans-serif;"">📊 HWD Portal - 專案執行狀況報告</h2>
+                <p style=""margin: 5px 0; font-family: Calibri, Arial, sans-serif;"">{SelectedHwOption} 部門 | {SelectedYear} 年度</p>
+            </td>
+        </tr>
+    </table>
+
+    <!-- Content -->
+    <table width=""100%"" cellpadding=""20"" cellspacing=""0"">
+        <tr>
+            <td>
+                <!-- Summary Box -->
+                <table width=""100%"" cellpadding=""15"" cellspacing=""0"" style=""background-color: white; border-radius: 5px; margin: 15px 0; font-family: Calibri, Arial, sans-serif;"">
+                    <tr>
+                        <td>
+                            <h3 style=""margin: 0 0 15px 0; font-family: Calibri, Arial, sans-serif;"">📈 狀態統計總覽</h3>
+                            <p style=""font-size: 16px; margin: 10px 0; font-family: Calibri, Arial, sans-serif;"">
+                                <strong>專案總數：</strong>{totalProjects} 個專案 |
+                                <strong>目前顯示：</strong>{displayedProjects} 個專案
+                            </p>
+
+                            <!-- Status Cards Table -->
+                            <table width=""100%"" cellpadding=""0"" cellspacing=""10"" style=""margin: 15px 0;"">
+                                <tr>
+                                    <!-- Non-Ready Card -->
+                                    <td width=""20%"" style=""background-color: #e9ecef; border: 2px solid #dee2e6; color: #495057; text-align: center; padding: 15px; border-radius: 5px; font-family: Calibri, Arial, sans-serif;"">
+                                        <div style=""font-size: 28px; font-weight: bold; margin-bottom: 5px; color: #495057; font-family: Calibri, Arial, sans-serif;"">{statusSummary.NonReady}</div>
+                                        <div style=""font-size: 14px; color: #6c757d; font-family: Calibri, Arial, sans-serif;"">Non-Ready</div>
+                                    </td>
+
+                                    <!-- Ready Card -->
+                                    <td width=""20%"" style=""background-color: #fff3cd; border: 2px solid #ffc107; color: #856404; text-align: center; padding: 15px; border-radius: 5px; font-family: Calibri, Arial, sans-serif;"">
+                                        <div style=""font-size: 28px; font-weight: bold; margin-bottom: 5px; color: #856404; font-family: Calibri, Arial, sans-serif;"">{statusSummary.Ready}</div>
+                                        <div style=""font-size: 14px; color: #856404; font-family: Calibri, Arial, sans-serif;"">Ready</div>
+                                    </td>
+
+                                    <!-- Checked Card -->
+                                    <td width=""20%"" style=""background-color: #d1ecf1; border: 2px solid #0dcaf0; color: #055160; text-align: center; padding: 15px; border-radius: 5px; font-family: Calibri, Arial, sans-serif;"">
+                                        <div style=""font-size: 28px; font-weight: bold; margin-bottom: 5px; color: #055160; font-family: Calibri, Arial, sans-serif;"">{statusSummary.Checked}</div>
+                                        <div style=""font-size: 14px; color: #055160; font-family: Calibri, Arial, sans-serif;"">Checked</div>
+                                    </td>
+
+                                    <!-- Approval Card -->
+                                    <td width=""20%"" style=""background-color: #d4edda; border: 2px solid #28a745; color: #155724; text-align: center; padding: 15px; border-radius: 5px; font-family: Calibri, Arial, sans-serif;"">
+                                        <div style=""font-size: 28px; font-weight: bold; margin-bottom: 5px; color: #155724; font-family: Calibri, Arial, sans-serif;"">{statusSummary.Approval}</div>
+                                        <div style=""font-size: 14px; color: #155724; font-family: Calibri, Arial, sans-serif;"">Approval</div>
+                                    </td>
+
+                                    <!-- Overdue Card -->
+                                    <td width=""20%"" style=""background-color: #f8d7da; border: 2px solid #dc3545; color: #721c24; text-align: center; padding: 15px; border-radius: 5px; font-family: Calibri, Arial, sans-serif;"">
+                                        <div style=""font-size: 28px; font-weight: bold; margin-bottom: 5px; color: #721c24; font-family: Calibri, Arial, sans-serif;"">{statusSummary.Overdue}</div>
+                                        <div style=""font-size: 14px; color: #721c24; font-family: Calibri, Arial, sans-serif;"">⚠️ Overdue</div>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+
+                <!-- Project Details Table -->
+                <table width=""100%"" cellpadding=""15"" cellspacing=""0"" style=""background-color: white; border-radius: 5px; margin: 15px 0; font-family: Calibri, Arial, sans-serif;"">
+                    <tr>
+                        <td>
+                            <h3 style=""margin: 0 0 15px 0; font-family: Calibri, Arial, sans-serif;"">📋 專案資訊</h3>
+                            {projectDetailsTable}
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+
+    <!-- Footer -->
+    <table width=""100%"" cellpadding=""15"" cellspacing=""0"" style=""background-color: #f8f9fa;"">
+        <tr>
+            <td style=""text-align: center; color: #6c757d; font-size: 12px; font-family: Calibri, Arial, sans-serif;"">
+                <p style=""margin: 5px 0; font-family: Calibri, Arial, sans-serif;"">此郵件由 HWD Portal 系統自動發送 | 發送時間：{DateTime.Now:yyyy/MM/dd HH:mm:ss}</p>
+                <p style=""margin: 5px 0; font-family: Calibri, Arial, sans-serif;"">如有問題，請聯繫系統管理員</p>
+            </td>
+        </tr>
+    </table>
+
+</body>
+</html>";
+
+            // === 呼叫 EmailService 發送郵件 ===
+            bool success = await MailSvc.SendEmailAsync(apiKey, fromAddress, toAddresses, mailSubject, mailBody, ccAddresses);
+
+            if (success)
+            {
+                await JSRuntime.InvokeVoidAsync("showToast", "專案狀態郵件已成功發送。", "success");
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("showToast", "郵件發送失敗，請檢查日誌或聯繫管理員。", "danger");
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"SendProjectStatus 發生錯誤: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("showToast", $"發送時發生例外錯誤: {ex.Message}", "danger");
+        }
+        finally
+        {
+            isSendingStatus = false;
+            StateHasChanged();
+        }
+    }
+
+    // 根據部門取得主要收件人（TO）
+    private string GetRecipientsByDepartment(string? department)
+    {
+        // TODO: 這裡應該從資料庫或設定檔讀取，目前先使用硬編碼
+        return department switch
+        {
+            "HW1" => "HW1_Manager@compal.com;HW1_Lead@compal.com",
+            "HW2" => "HW2_Manager@compal.com;HW2_Lead@compal.com",
+            "HW3" => "HW3_Manager@compal.com;HW3_Lead@compal.com",
+            "HW4" => "HW4_Manager@compal.com;HW4_Lead@compal.com",
+            "PWR1" => "MikeMY_Wu@compal.com;NeilWC_Lin@compal.com",
+            "PWR2" => "Carlos_Wang@compal.com;Tom_Chiu@compal.com",
+            _ => "Chain_Liu@compal.com" // 預設收件人
+        };
+    }
+
+    // 根據部門取得副本收件人（CC）
+    private string GetCCRecipientsByDepartment(string? department)
+    {
+        // TODO: 這裡應該從資料庫或設定檔讀取，目前先使用硬編碼
+        return department switch
+        {
+            "HW1" => "Chain_Liu@compal.com",
+            "HW2" => "Chain_Liu@compal.com",
+            "HW3" => "Chain_Liu@compal.com",
+            "HW4" => "Chain_Liu@compal.com",
+            "PWR1" => "Chain_Liu@compal.com;HankC_Huang@compal.com",
+            "PWR2" => "Chain_Liu@compal.com;HankC_Huang@compal.com",
+            _ => "" // 預設無 CC
+        };
+    }
+
+    // 產生專案詳細資訊表格（含人員資訊）
+    private string GenerateProjectDetailsTable()
+    {
+        var dataToAnalyze = filteredData ?? projectData;
+
+        if (dataToAnalyze == null || dataToAnalyze.Rows.Count == 0)
+        {
+            return "<p style='text-align:center; color:#6c757d; font-family: Calibri, Arial, sans-serif;'>目前沒有可顯示的專案資料。</p>";
+        }
+
+        // 取得所有專案欄位（排除 Stage 和 Item）
+        var projectColumns = dataToAnalyze.Columns.Cast<DataColumn>()
+            .Where(c => c.ColumnName != "Stage" && c.ColumnName != "Item")
+            .Select(c => c.ColumnName)
+            .ToList();
+
+        if (!projectColumns.Any())
+        {
+            return "<p style='text-align:center; color:#6c757d; font-family: Calibri, Arial, sans-serif;'>目前沒有專案資料。</p>";
+        }
+
+        // 計算每個專案的各狀態數量，並取得人員資訊
+        var projectStats = new Dictionary<string, (string DM, string DL, string DE, int NonReady, int Ready, int Checked, int Approval, int Overdue)>();
+
+        foreach (var projectName in projectColumns)
+        {
+            int nonReady = 0, ready = 0, checked_ = 0, approval = 0, overdue = 0;
+
+            // 計算狀態統計
+            foreach (DataRow row in dataToAnalyze.Rows)
+            {
+                string cellValue = row[projectName].ToString() ?? "";
+                string cleanValue = cellValue.Replace("*", "").Trim();
+
+                if (cellValue.Contains("!"))
+                {
+                    overdue++;
+                }
+                else if (cleanValue.Contains("Approval"))
+                {
+                    approval++;
+                }
+                else if (cleanValue.Contains("Checked"))
+                {
+                    checked_++;
+                }
+                else if (cleanValue.Contains("Ready") && !cleanValue.Contains("Non-Ready"))
+                {
+                    ready++;
+                }
+                else if (cleanValue.Contains("Non-Ready") || cleanValue.Contains("2999") ||
+                         string.IsNullOrWhiteSpace(cleanValue) || cleanValue.Contains("年"))
+                {
+                    nonReady++;
+                }
+            }
+
+            // 取得專案人員資訊
+            string dm = "-", dl = "-", de = "-";
+            if (allProjectDetails.TryGetValue(projectName, out var details))
+            {
+                dm = string.IsNullOrWhiteSpace(details.Personnel.DM) ? "-" : details.Personnel.DM;
+                dl = string.IsNullOrWhiteSpace(details.Personnel.DL) ? "-" : details.Personnel.DL;
+                de = string.IsNullOrWhiteSpace(details.Personnel.DE) ? "-" : details.Personnel.DE;
+            }
+
+            projectStats[projectName] = (dm, dl, de, nonReady, ready, checked_, approval, overdue);
+        }
+
+        // 產生 HTML 表格
+        var sb = new System.Text.StringBuilder();
+
+        sb.AppendLine(@"
+    <table width=""100%"" cellpadding=""8"" cellspacing=""0"" style=""border-collapse: collapse; border: 1px solid #dee2e6; font-family: Calibri, Arial, sans-serif;"">
+        <thead>
+            <tr style=""background-color: #0d6efd; color: white;"">
+                <th style=""padding: 12px; text-align: left; border: 1px solid #0d6efd; font-family: Calibri, Arial, sans-serif;"">專案名稱</th>
+                <th style=""padding: 12px; text-align: center; border: 1px solid #0d6efd; font-family: Calibri, Arial, sans-serif;"">專案經理</th>
+                <th style=""padding: 12px; text-align: center; border: 1px solid #0d6efd; font-family: Calibri, Arial, sans-serif;"">專案主任</th>
+                <th style=""padding: 12px; text-align: center; border: 1px solid #0d6efd; font-family: Calibri, Arial, sans-serif;"">專案工程師</th>
+                <th style=""padding: 12px; text-align: center; border: 1px solid #0d6efd; font-family: Calibri, Arial, sans-serif;"">Non-Ready</th>
+                <th style=""padding: 12px; text-align: center; border: 1px solid #0d6efd; font-family: Calibri, Arial, sans-serif;"">Ready</th>
+                <th style=""padding: 12px; text-align: center; border: 1px solid #0d6efd; font-family: Calibri, Arial, sans-serif;"">Checked</th>
+                <th style=""padding: 12px; text-align: center; border: 1px solid #0d6efd; font-family: Calibri, Arial, sans-serif;"">Approval</th>
+                <th style=""padding: 12px; text-align: center; border: 1px solid #0d6efd; font-family: Calibri, Arial, sans-serif;"">Overdue</th>
+            </tr>
+        </thead>
+        <tbody>");
+
+        int rowIndex = 0;
+        foreach (var kvp in projectStats)
+        {
+            string projectName = kvp.Key;
+            var stats = kvp.Value;
+            string rowBg = (rowIndex % 2 == 0) ? "#ffffff" : "#f8f9fa";
+
+            sb.AppendLine($@"
+            <tr style=""background-color: {rowBg};"">
+                <td style=""padding: 10px; border: 1px solid #dee2e6; font-weight: bold; font-family: Calibri, Arial, sans-serif;"">{projectName}</td>
+                <td style=""padding: 10px; text-align: center; border: 1px solid #dee2e6; font-size: 13px; font-family: Calibri, Arial, sans-serif;"">{stats.DM}</td>
+                <td style=""padding: 10px; text-align: center; border: 1px solid #dee2e6; font-size: 13px; font-family: Calibri, Arial, sans-serif;"">{stats.DL}</td>
+                <td style=""padding: 10px; text-align: center; border: 1px solid #dee2e6; font-size: 13px; font-family: Calibri, Arial, sans-serif;"">{stats.DE}</td>
+                <td style=""padding: 10px; text-align: center; border: 1px solid #dee2e6; color: #6c757d; font-family: Calibri, Arial, sans-serif;"">{stats.NonReady}</td>
+                <td style=""padding: 10px; text-align: center; border: 1px solid #dee2e6; color: #856404; font-family: Calibri, Arial, sans-serif;"">{stats.Ready}</td>
+                <td style=""padding: 10px; text-align: center; border: 1px solid #dee2e6; color: #055160; font-family: Calibri, Arial, sans-serif;"">{stats.Checked}</td>
+                <td style=""padding: 10px; text-align: center; border: 1px solid #dee2e6; color: #155724; font-family: Calibri, Arial, sans-serif;"">{stats.Approval}</td>
+                <td style=""padding: 10px; text-align: center; border: 1px solid #dee2e6; color: #721c24; font-weight: bold; font-family: Calibri, Arial, sans-serif;"">{stats.Overdue}</td>
+            </tr>");
+
+            rowIndex++;
+        }
+
+        sb.AppendLine(@"
+        </tbody>
+    </table>");
+
+        return sb.ToString();
+    }
+
+    // 重新計算狀態統計（修正版本）
+    private (int NonReady, int Ready, int Checked, int Approval, int Overdue) CalculateStatusSummary()
+    {
+        // 使用 filteredData 來計算目前顯示的資料
+        var dataToAnalyze = filteredData ?? projectData;
+
+        if (dataToAnalyze == null || dataToAnalyze.Rows.Count == 0)
+        {
+            return (0, 0, 0, 0, 0);
+        }
+
+        int nonReadyCount = 0;
+        int readyCount = 0;
+        int checkedCount = 0;
+        int approvalCount = 0;
+        int overdueCount = 0;
+
+        // 取得所有專案欄位（排除 Stage 和 Item）
+        var projectColumns = dataToAnalyze.Columns.Cast<DataColumn>()
+            .Where(c => c.ColumnName != "Stage" && c.ColumnName != "Item")
+            .ToList();
+
+        // 遍歷每個專案欄位的每個儲存格
+        foreach (DataColumn column in projectColumns)
+        {
+            foreach (DataRow row in dataToAnalyze.Rows)
+            {
+                string cellValue = row[column].ToString() ?? "";
+
+                // 清除 * 標記以便正確判斷
+                string cleanValue = cellValue.Replace("*", "").Trim();
+
+                // 優先檢查 Overdue（包含 "!" 符號）
+                if (cellValue.Contains("!"))
+                {
+                    overdueCount++;
+                }
+                // 檢查 Approval 狀態
+                else if (cleanValue.Contains("Approval"))
+                {
+                    approvalCount++;
+                }
+                // 檢查 Checked 狀態
+                else if (cleanValue.Contains("Checked"))
+                {
+                    checkedCount++;
+                }
+                // 檢查 Ready 狀態（排除 Non-Ready）
+                else if (cleanValue.Contains("Ready") && !cleanValue.Contains("Non-Ready"))
+                {
+                    readyCount++;
+                }
+                // Non-Ready 或空白
+                else if (cleanValue.Contains("Non-Ready") ||
+                         cleanValue.Contains("2999") ||
+                         string.IsNullOrWhiteSpace(cleanValue) ||
+                         cleanValue.Contains("年"))
+                {
+                    nonReadyCount++;
+                }
+            }
+        }
+        return (nonReadyCount, readyCount, checkedCount, approvalCount, overdueCount);
     }
 
     // 用於切換卡片最大化/還原狀態的方法
@@ -725,7 +1124,7 @@
     {
         if (uploadedFiles != null && uploadedFiles.Any())
         {
-            Console.WriteLine($"{uploadedFiles.Count} 個檔案上傳處理完畢。");
+            Debug.WriteLine($"{uploadedFiles.Count} 個檔案上傳處理完畢。");
             // [舊有邏輯] 呼叫方法來記錄上傳動作
             await LogFileActionAsync(uploadedFiles, "Upload");
 
@@ -758,7 +1157,7 @@
     {
         if (!string.IsNullOrEmpty(deletedFileName))
         {
-            Console.WriteLine($"檔案 '{deletedFileName}' 已被刪除。");
+            Debug.WriteLine($"檔案 '{deletedFileName}' 已被刪除。");
             // [舊有邏輯] 呼叫紀錄方法來記錄刪除動作
             await LogFileActionAsync(new List<string> { deletedFileName }, "Delete");
 
@@ -813,7 +1212,7 @@
             catch (Exception ex)
             {
                 // 錯誤處理，避免因檔案系統權限等問題導致程式崩潰
-                Console.WriteLine($"檢查檔案目錄或更新狀態時發生錯誤: {ex.Message}");
+                Debug.WriteLine($"檢查檔案目錄或更新狀態時發生錯誤: {ex.Message}");
                 await JSRuntime.InvokeVoidAsync("showToast", "檢查檔案狀態時發生錯誤，請聯絡管理員。", "danger");
             }
         }
@@ -823,7 +1222,7 @@
     {
         if (downloadedFiles != null && downloadedFiles.Any())
         {
-            Console.WriteLine($"{downloadedFiles.Count} 個檔案下載請求已發送。");
+            Debug.WriteLine($"{downloadedFiles.Count} 個檔案下載請求已發送。");
             // 呼叫新的方法來記錄下載動作
             await LogFileActionAsync(downloadedFiles, "Download");
         }
@@ -835,7 +1234,7 @@
         // 檢查是否有必要的資訊可供記錄
         if (string.IsNullOrEmpty(selectedProjectName) || string.IsNullOrEmpty(selectedStage) || string.IsNullOrEmpty(selectedItem))
         {
-            Console.WriteLine("無法記錄檔案操作：缺少專案、階段或項目的上下文資訊。");
+            Debug.WriteLine("無法記錄檔案操作：缺少專案、階段或項目的上下文資訊。");
             return;
         }
 
@@ -877,12 +1276,12 @@
                     catch (Exception ex)
                     {
                         // 記錄錯誤，但不中斷流程，以確保其他檔案的記錄能繼續
-                        Console.WriteLine($"記錄檔案操作 {actionType} for file {fileName} 失敗: {ex.Message}");
+                        Debug.WriteLine($"記錄檔案操作 {actionType} for file {fileName} 失敗: {ex.Message}");
                     }
                 }
             }
         }
-        Console.WriteLine($"已成功記錄 {fileNames.Count} 筆 '{actionType}' 操作至資料庫。");
+        Debug.WriteLine($"已成功記錄 {fileNames.Count} 筆 '{actionType}' 操作至資料庫。");
     }
 
     // 專案人員的資料模型
@@ -1240,7 +1639,7 @@
             }
             catch (SqlException ex)
             {
-                Console.WriteLine($"SQL Error reading {readsheet}: {ex.Message}");
+                Debug.WriteLine($"SQL Error reading {readsheet}: {ex.Message}");
                 sqlQueryTime = DateTime.MinValue; // 發生錯誤時，重設時間，避免顯示舊的或錯誤的時間戳記
                 return new DataTable();
             }
@@ -1386,7 +1785,7 @@
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"排序錯誤: {ex.Message}");
+            Debug.WriteLine($"排序錯誤: {ex.Message}");
         }
     }
 
@@ -1517,7 +1916,7 @@
         catch (Exception ex)
         {
             // 如果發生錯誤 (例如，路徑無效、權限不足)，則記錄錯誤並通知使用者
-            Console.WriteLine($"開啟資料夾失敗: {ex.Message}");
+            Debug.WriteLine($"開啟資料夾失敗: {ex.Message}");
             await JSRuntime.InvokeVoidAsync("showToast", $"開啟資料夾失敗: {ex.Message}", "danger");
         }
     }
@@ -1555,11 +1954,11 @@
         // [可選] 在控制台輸出選中資訊，方便偵錯
         if (!string.IsNullOrEmpty(selectedCellKey))
         {
-            Console.WriteLine($"已選中儲存格 - 專案: {selectedProjectName}, Stage: {selectedStage}, Item: {selectedItem}");
+            Debug.WriteLine($"已選中儲存格 - 專案: {selectedProjectName}, Stage: {selectedStage}, Item: {selectedItem}");
         }
         else
         {
-            Console.WriteLine("已取消選擇儲存格");
+            Debug.WriteLine("已取消選擇儲存格");
         }
     }
 
@@ -1633,11 +2032,11 @@
         {
             if (string.IsNullOrEmpty(selectedCellKey))
             {
-                Console.WriteLine("錯誤：請先在表格中選擇一個儲存格。");
+                Debug.WriteLine("錯誤：請先在表格中選擇一個儲存格。");
             }
             else
             {
-                Console.WriteLine("錯誤：使用者資訊尚未初始化，無法執行操作。");
+                Debug.WriteLine("錯誤：使用者資訊尚未初始化，無法執行操作。");
             }
         }
     }
@@ -1691,11 +2090,11 @@
         {
             if (string.IsNullOrEmpty(selectedCellKey))
             {
-                Console.WriteLine("錯誤：請先在表格中選擇一個儲存格。");
+                Debug.WriteLine("錯誤：請先在表格中選擇一個儲存格。");
             }
             else
             {
-                Console.WriteLine("錯誤：使用者資訊尚未初始化，無法執行操作。");
+                Debug.WriteLine("錯誤：使用者資訊尚未初始化，無法執行操作。");
             }
         }
     }
@@ -1748,7 +2147,7 @@
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"顯示成功 Modal 時發生錯誤：{ex.Message}");
+            Debug.WriteLine($"顯示成功 Modal 時發生錯誤：{ex.Message}");
             // 如果 JS Interop 失敗，回退到簡單的 alert 作為備用方案
             await JSRuntime.InvokeVoidAsync("alert", successMessage);
         }
@@ -1778,7 +2177,7 @@
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"顯示錯誤 Modal 時發生錯誤：{ex.Message}");
+            Debug.WriteLine($"顯示錯誤 Modal 時發生錯誤：{ex.Message}");
             // 如果 JS Interop 失敗，回退到簡單的 alert 作為備用方案
             await JSRuntime.InvokeVoidAsync("alert", errorMessage);
         }
@@ -1952,11 +2351,11 @@
                     }
                 }
             }
-            Console.WriteLine($"已成功批次載入 {allProjectDetails.Count} 個專案的詳細資訊。");
+            Debug.WriteLine($"已成功批次載入 {allProjectDetails.Count} 個專案的詳細資訊。");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"批次載入專案詳細資訊時發生錯誤：{ex.Message}");
+            Debug.WriteLine($"批次載入專案詳細資訊時發生錯誤：{ex.Message}");
         }
     }  
 
@@ -2044,7 +2443,7 @@
                     cmd.Parameters.AddWithValue("@Status", "進行中");
 
                     await cmd.ExecuteNonQueryAsync();
-                    Console.WriteLine($"專案 '{modalProjectName}' 的詳細資訊已成功儲存至資料庫。");
+                    Debug.WriteLine($"專案 '{modalProjectName}' 的詳細資訊已成功儲存至資料庫。");
                 }
             }
             // 專案資訊儲存成功後，立即呼叫通用的日期更新函式
@@ -2082,7 +2481,7 @@
         catch (Exception ex)
         {
             // 錯誤處理流程
-            Console.WriteLine($"儲存專案資訊至資料庫時發生錯誤：{ex.Message}");
+            Debug.WriteLine($"儲存專案資訊至資料庫時發生錯誤：{ex.Message}");
             errorMessage = $"儲存專案資訊失敗：{ex.Message}";
             // 關閉編輯視窗，再顯示錯誤視窗，避免疊加
             await JSRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('projectInfoModal')).hide()");
@@ -2102,7 +2501,7 @@
         // 檢查是否有執行紀錄所需的上下文資訊
         if (string.IsNullOrEmpty(selectedProjectName) || string.IsNullOrEmpty(selectedStage) || string.IsNullOrEmpty(selectedItem))
         {
-            Console.WriteLine("無法記錄審核操作：缺少專案、階段或項目的上下文資訊。");
+            Debug.WriteLine("無法記錄審核操作：缺少專案、階段或項目的上下文資訊。");
             return;
         }
 
@@ -2111,7 +2510,7 @@
         if (string.IsNullOrEmpty(connectionString))
         {
             // [修正] 錯誤訊息中的連線字串名稱應與程式碼一致
-            Console.WriteLine("無法記錄審核操作：未設定 'WriteConnection_A31_HWD' 連線字串。");
+            Debug.WriteLine("無法記錄審核操作：未設定 'WriteConnection_A31_HWD' 連線字串。");
             return;
         }
 
@@ -2146,13 +2545,13 @@
                     cmd.Parameters.AddWithValue("@ActionTime", actionTime);
 
                     await cmd.ExecuteNonQueryAsync();
-                    Console.WriteLine($"已成功記錄一筆 '{reviewAction}' 操作至 Review_Record 資料表。");
+                    Debug.WriteLine($"已成功記錄一筆 '{reviewAction}' 操作至 Review_Record 資料表。");
                 }
             }
             catch (Exception ex)
             {
                 // 記錄錯誤，但不中斷前端操作
-                Console.WriteLine($"記錄審核操作 '{reviewAction}' for project {selectedProjectName} 失敗: {ex.Message}");
+                Debug.WriteLine($"記錄審核操作 '{reviewAction}' for project {selectedProjectName} 失敗: {ex.Message}");
             }
         }
     }
@@ -2348,7 +2747,7 @@
                             using (var alterCmd = new SqlCommand(alterTableQuery, conn, transaction)) // 將 transaction 加入 command
                             {
                                 await alterCmd.ExecuteNonQueryAsync();
-                                Console.WriteLine($"已成功在資料表 '{dashboardTableName}' 中新增欄位 '{newColumnName}'。");
+                                Debug.WriteLine($"已成功在資料表 '{dashboardTableName}' 中新增欄位 '{newColumnName}'。");
                             }
 
                             // 接著，立即將這個新欄位的所有儲存格內容更新為 'Non-Ready'
@@ -2357,12 +2756,12 @@
                             using (var updateCmd = new SqlCommand(updateQuery, conn, transaction))
                             {
                                 await updateCmd.ExecuteNonQueryAsync();
-                                Console.WriteLine($"已將新欄位 '{newColumnName}' 的所有儲存格初始值設為 'Non-Ready'。");
+                                Debug.WriteLine($"已將新欄位 '{newColumnName}' 的所有儲存格初始值設為 'Non-Ready'。");
                             }
                         }
                         else
                         {
-                            Console.WriteLine($"欄位 '{newColumnName}' 已存在於資料表 '{dashboardTableName}' 中，無需新增。");
+                            Debug.WriteLine($"欄位 '{newColumnName}' 已存在於資料表 '{dashboardTableName}' 中，無需新增。");
                         }
                     }
 
@@ -2411,7 +2810,7 @@
     {
         if (projectData == null || !projectData.Columns.Contains(projectName) || string.IsNullOrEmpty(projectDepartment))
         {
-            Console.WriteLine("ProcessProjectCellUpdates 中止：缺少必要的參數 (projectData, projectName, projectDepartment)。");
+            Debug.WriteLine("ProcessProjectCellUpdates 中止：缺少必要的參數 (projectData, projectName, projectDepartment)。");
             return;
         }
         var updatesToCommit = new List<(string Stage, string Item, string NewValue)>();
@@ -2474,11 +2873,11 @@
             }
 
             // Debug: 顯示讀取到的 Milestone 數量
-            Console.WriteLine($"[DEBUG] Populated {projectMilestones.Count} project milestones.");
+            Debug.WriteLine($"[DEBUG] Populated {projectMilestones.Count} project milestones.");
             if (!projectMilestones.Any())
             {
                 // Debug: 提示沒有 Milestone，將中止後續處理
-                Console.WriteLine("[DEBUG] No milestones found for this project. Aborting SOW processing.");
+                Debug.WriteLine("[DEBUG] No milestones found for this project. Aborting SOW processing.");
                 return;
             }
 
@@ -2501,10 +2900,10 @@
                 }
             }
             // Debug: 顯示讀取到的 SOW 規則數量
-            Console.WriteLine($"[DEBUG] Populated {sowRules.Count} SOW rules from the database.");
+            Debug.WriteLine($"[DEBUG] Populated {sowRules.Count} SOW rules from the database.");
 
             // Debug: 標記開始處理資料列
-            Console.WriteLine("[DEBUG] --- Starting to process projectData rows ---");
+            Debug.WriteLine("[DEBUG] --- Starting to process projectData rows ---");
             foreach (DataRow row in projectData.Rows)
             {
                 var itemToUpdate = row["Item"]?.ToString()?.Trim();
@@ -2517,17 +2916,17 @@
                     cleanedCellValue.Equals("Checked", StringComparison.OrdinalIgnoreCase) ||
                     cleanedCellValue.Equals("Approval", StringComparison.OrdinalIgnoreCase))
                 {
-                    Console.WriteLine($"[DEBUG]  -> Skipping Item '{itemToUpdate}' because its status is '{currentCellValue}'.");
+                    Debug.WriteLine($"[DEBUG]  -> Skipping Item '{itemToUpdate}' because its status is '{currentCellValue}'.");
                     continue;
                 }
 
 
                 // Debug: 顯示正在處理的 Item 名稱
-                Console.WriteLine($"[DEBUG] Processing Item: '{itemToUpdate}'");
+                Debug.WriteLine($"[DEBUG] Processing Item: '{itemToUpdate}'");
                 if (sowRules.TryGetValue(itemToUpdate, out var dDateRule))
                 {
                     // Debug: 顯示找到了對應的 SOW 規則
-                    Console.WriteLine($"[DEBUG]  -> Found SOW Rule: '{dDateRule}'");
+                    Debug.WriteLine($"[DEBUG]  -> Found SOW Rule: '{dDateRule}'");
 
                     string? dateValue = CalculateDateFromRule(dDateRule, projectMilestones);
 
@@ -2535,7 +2934,7 @@
                     {
 
                         // Debug 訊息改回只顯示計算出的日期
-                        Console.WriteLine($"[DEBUG]  -> Calculated Date: '{dateValue}'. Updating cell.");
+                        Debug.WriteLine($"[DEBUG]  -> Calculated Date: '{dateValue}'. Updating cell.");
 
                         // 直接使用計算出的乾淨日期 (dateValue) 來更新 DataTable
                         row[projectName] = dateValue;
@@ -2549,28 +2948,28 @@
                     else
                     {
                         // Debug: 提示無法從規則計算出日期
-                        Console.WriteLine($"[DEBUG]  -> FAILED to calculate date from rule '{dDateRule}'. Check if base milestone exists.");
+                        Debug.WriteLine($"[DEBUG]  -> FAILED to calculate date from rule '{dDateRule}'. Check if base milestone exists.");
                     }
                 }
                 else
                 {
                     // Debug: 提示找不到對應的 SOW 規則
-                    Console.WriteLine($"[DEBUG]  -> No SOW rule found for this item.");
+                    Debug.WriteLine($"[DEBUG]  -> No SOW rule found for this item.");
                 }
 
             }
             // Debug: 標記處理資料列結束
-            Console.WriteLine("[DEBUG] --- Finished processing projectData rows ---");
+            Debug.WriteLine("[DEBUG] --- Finished processing projectData rows ---");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"在 ProcessProjectCellUpdates 中讀取資料庫時發生錯誤: {ex.Message}");
+            Debug.WriteLine($"在 ProcessProjectCellUpdates 中讀取資料庫時發生錯誤: {ex.Message}");
             await JSRuntime.InvokeVoidAsync("showToast", "更新專案時程時發生資料庫錯誤。", "danger");
         }
         finally
         {
             // Debug: 顯示最終要寫入資料庫的更新筆數
-            Console.WriteLine($"[DEBUG] Committing {updatesToCommit.Count} updates to the database.");
+            Debug.WriteLine($"[DEBUG] Committing {updatesToCommit.Count} updates to the database.");
 
             var updateTasks = updatesToCommit.Select(update =>
                 UpdateSourceTableAsync(projectName, update.Stage, update.Item, update.NewValue, showNotification: false));
@@ -2638,7 +3037,7 @@
         // 防呆：確保所有必要資訊都存在
         if (string.IsNullOrEmpty(projectName) || string.IsNullOrEmpty(stage) || string.IsNullOrEmpty(item) || string.IsNullOrEmpty(SelectedHwOption) || SelectedYear == 0)
         {
-            Console.WriteLine("缺少更新來源資料表的必要資訊，操作已中止。");
+            Debug.WriteLine("缺少更新來源資料表的必要資訊，操作已中止。");
             return;
         }
 
@@ -2648,7 +3047,7 @@
         string connectionString = _configuration.GetConnectionString("WriteConnection_A31_HWD_PWR");
         if (string.IsNullOrEmpty(connectionString))
         {
-            Console.WriteLine($"無法更新來源資料表：未設定 'WriteConnection_A31_HWD_PWR' 連線字串。");
+            Debug.WriteLine($"無法更新來源資料表：未設定 'WriteConnection_A31_HWD_PWR' 連線字串。");
             // 只有在需要時才顯示 Toast
             if (showNotification)
             {
@@ -2688,7 +3087,7 @@
                     }
                     else
                     {
-                        Console.WriteLine($"警告：更新資料表 '{tableName}' 時，找不到符合條件的資料列 (Stage='{stage}', Item='{item}')。");
+                        Debug.WriteLine($"警告：更新資料表 '{tableName}' 時，找不到符合條件的資料列 (Stage='{stage}', Item='{item}')。");
                         // 只有在需要時才顯示 Toast
                         if (showNotification)
                         {
@@ -2701,7 +3100,7 @@
         catch (Exception ex)
         {
             // 記錄錯誤，但不影響前端操作
-            Console.WriteLine($"直接更新來源資料表 '{tableName}' 時發生錯誤: {ex.Message}");
+            Debug.WriteLine($"直接更新來源資料表 '{tableName}' 時發生錯誤: {ex.Message}");
             // 只有在需要時才顯示 Toast
             if (showNotification)
             {

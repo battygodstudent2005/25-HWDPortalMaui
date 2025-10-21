@@ -3,6 +3,7 @@
 @using Microsoft.Extensions.Logging
 @inject SecondSourceService SecondSourceSvc
 @inject ILogger<SecondSource> Logger
+@inject UserInfoService _userInfoService
 
 @* 篩選條件區塊 (結構同 Document.razor) *@
 <div class="row mb-3 g-2">
@@ -15,12 +16,12 @@
                 </span>
             </div>
             <div class="card-body py-2">
-                @* 搜尋欄位 (參考 Document.razor) *@
-                <div class="row mb-3">
-                    <div class="col-md-12">
+                @* [修改] 搜尋欄位結構 *@
+                <div class="row mb-3 align-items-center">
+                    @* [修改] 搜尋框改為 8 欄寬 *@
+                    <div class="col-md-8">
                         <div class="input-group">
                             <span class="input-group-text"><i class="bi bi-search"></i></span>
-                            @* 修改 placeholder 文字 *@
                             <input type="text" class="form-control" placeholder="依 Candidate PN / Main Source MPN / Main Source CPN 搜尋..."
                                    @bind="SearchTerm" @bind:event="oninput" />
                             @if (!string.IsNullOrWhiteSpace(SearchTerm))
@@ -28,6 +29,15 @@
                                 <button class="btn btn-outline-secondary" @onclick="ClearSearch">
                                     <i class="bi bi-x-lg"></i>
                                 </button>
+                            }
+                        </div>
+                    </div>
+                    @* [新增] 管理按鈕區塊 *@
+                    <div class="col-md-4">
+                        <div class="d-flex justify-content-end align-items-center">
+                            @if (IsAdmin)
+                            {
+                                <button class="btn btn-primary btn-sm" @onclick="OpenManageModal">管理</button>
                             }
                         </div>
                     </div>
@@ -240,10 +250,43 @@
     </div>
 </div>
 
+@* 管理介面的 Modal *@
+@if (showManageModal)
+{
+    <div class="modal fade show" tabindex="-1" style="display: block;" role="dialog">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">替代料管理</h5>
+                    <button type="button" class="btn-close" @onclick="CloseManageModal"></button>
+                </div>
+                <div class="modal-body">
+                    @* 管理介面的內容將會放在這裡 *@
+                    <p>管理介面內容待新增。</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseManageModal">關閉</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
 
 @code {
     [CascadingParameter]
     public MainLayout? Layout { get; set; }
+
+    // Modal 相關狀態
+    private bool showManageModal = false;
+    // 定義一個唯讀的管理員清單 (同 Document.razor)
+    private readonly HashSet<string> AdminList = new() { "Chain_Liu", "Morris_Wu", "Toby_Lin"};
+    // 新增一個布林屬性，用來判斷目前使用者是否在 AdminList 中
+    private bool IsAdmin => _userInfoService != null && !string.IsNullOrEmpty(_userInfoService.UserName) && AdminList.Contains(_userInfoService.UserName);
+
+    // Modal 的控制方法
+    private void OpenManageModal() => showManageModal = true;
+    private void CloseManageModal() => showManageModal = false;
 
     // 載入狀態
     private bool isLoading = true;
