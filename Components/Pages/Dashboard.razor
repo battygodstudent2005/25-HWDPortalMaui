@@ -136,7 +136,7 @@
                 <div class="d-flex align-items-center">
                     @if (sqlQueryTime != DateTime.MinValue)
                     {
-                        <small class="text-muted me-3">資料時間: @sqlQueryTime.ToString("yyyy/mm/dd HH:mm:ss")</small>
+                        <small class="text-muted me-3">資料時間: @sqlQueryTime.ToString("yyyy/MM/dd HH:mm:ss")</small>
                     }
                     @* 最大化/還原按鈕 *@
                     <button class="btn btn-sm btn-outline-secondary p-0 lh-1" @onclick="ToggleProjectInfoMaximize" title="@(isProjectInfoMaximized ? "還原" : "最大化")">
@@ -238,6 +238,7 @@
                                                     style="@GetCellStyle(cellValue, col.ColumnName)"
                                                     title="@cellValue"
                                                     @onclick="() => SelectCell(row, col)"
+                                                    @ondblclick="() => HandleCellDoubleClick(row, col)"
                                                     @oncontextmenu:preventDefault
                                                     @oncontextmenu="@((e) => ShowContextMenu(e, row, col))">
                                                     <div class="cell-content">
@@ -636,6 +637,8 @@
     private bool canPerformCellActions = false; // 用於判斷儲存格內容是否允許特定操作 (核准/下載)
     private FileUploadModal fileUploadModal = null!; // 對新元件的參考(Reference)
     private FileDownloadModal fileDownloadModal = null!;
+    // 旗標：用於追蹤右鍵選單是否剛被觸發
+    private bool _isContextMenuJustShown = false;
 
     private int updatedRecordsCount = 0;
     // 用於存放成功的詳細資訊
@@ -660,6 +663,20 @@
     private bool isSavingNewProject = false; // 控制新增 Modal 儲存按鈕的載入狀態
     private bool isOverdueFilterActive = false; // 用於追蹤 Overdue 篩選器是否啟用
 
+    // 覆寫 OnAfterRenderAsync
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // 檢查旗標，如果為 true，代表選單剛被渲染到 DOM 中
+        if (_isContextMenuJustShown)
+        {
+            // 重設旗標，避免重複執行
+            _isContextMenuJustShown = false;
+            
+            // 呼叫 JS 函式來調整選單的最終位置
+            await JSRuntime.InvokeVoidAsync("adjustContextMenuPosition");
+        }
+    }
+
     // 用於存放從 ProjectInfo 資料表讀取的，單一專案的完整詳細資訊
     private class ProjectDetails
     {
@@ -674,6 +691,17 @@
         ApplyFilter(); // 重新套用所有篩選條件
     }
 
+    // 處理儲存格雙點擊事件
+    private async Task HandleCellDoubleClick(DataRow row, DataColumn column)
+    {
+        // 1. 執行單點擊的選取邏輯 (此方法內部會檢查是否為 Stage/Item 欄)
+        // 這會設定 selectedProjectName, selectedStage, selectedItem
+        SelectCell(row, column);
+
+        // 2. 執行開啟資料夾的邏輯
+        // 此方法會使用 SelectCell 所設定的變數
+        await OpenProjectFolderPath();
+    }
     // 發送專案 Status 的方法
     private async Task SendProjectStatus()
     {
@@ -1444,6 +1472,9 @@
         contextMenuY = e.ClientY;
         // 顯示選單
         showContextMenu = true;
+        // 設定旗標，通知 OnAfterRenderAsync 需要執行 JS
+
+        _isContextMenuJustShown = true;
         // 通知 Blazor 進行畫面刷新
         StateHasChanged();
     }
@@ -1454,6 +1485,8 @@
     private void CloseContextMenu()
     {
         showContextMenu = false;
+        // 關閉選單時，也要重設旗標
+        _isContextMenuJustShown = false;
         StateHasChanged();
     }
 
@@ -2820,7 +2853,7 @@
             if (string.IsNullOrEmpty(itemToUpdate)) continue;
 
             var currentCellValue = row[projectName]?.ToString() ?? "";
-            // [新增] 如果儲存格的值包含 "年" 這個關鍵字，就代表它是日期格式
+            // 如果儲存格的值包含 "年" 這個關鍵字，就代表它是日期格式
             // 且不為 "Ready", "Checked", "Approval" 等狀態時
             // 就將其初始值設定為 "Non-Ready"
             if (currentCellValue.Contains("年") || currentCellValue.Contains("/"))

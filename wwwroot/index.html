@@ -73,6 +73,52 @@
 
             toast.show();
         };
+        // 調整右鍵選單位置，避免超出可視範圍
+        function adjustContextMenuPosition() {
+            // 1. 找到 Blazor 剛渲染出來的選單
+            var menu = document.querySelector('.context-menu');
+            if (!menu) {
+                return; // 如果找不到選單，則不執行
+            }
+
+            // 2. 取得選單的尺寸和當前視窗的高度
+            var menuHeight = menu.offsetHeight;
+            var menuWidth = menu.offsetWidth;
+            var viewportHeight = window.innerHeight;
+            var viewportWidth = window.innerWidth;
+
+            // 3. 取得 Blazor 設定的初始點擊位置 (從 style 讀取)
+            var currentTop = parseInt(menu.style.top, 10);
+            var currentLeft = parseInt(menu.style.left, 10);
+
+            var newTop = currentTop;
+            var newLeft = currentLeft;
+
+            // 4. 檢查垂直是否溢出 (核心修正)
+            // 如果 (選單的頂部 + 選單的高度) > 視窗高度
+            if (currentTop + menuHeight > viewportHeight) {
+                // 將選單的頂部位置改為 (視窗高度 - 選單高度 - 5px緩衝)
+                newTop = viewportHeight - menuHeight - 5;
+
+                // 額外處理：如果選單比視窗還高，至少讓它從頂部 0 開始
+                if (newTop < 0) {
+                    newTop = 0;
+                }
+            }
+
+            // 5. 檢查水平是否溢出 (額外優化)
+            if (currentLeft + menuWidth > viewportWidth) {
+                // 將選單的左側位置改為 (視窗寬度 - 選單寬度 - 5px緩衝)
+                newLeft = viewportWidth - menuWidth - 5;
+                if (newLeft < 0) {
+                    newLeft = 0;
+                }
+            }
+
+            // 6. 套用計算後的最終位置
+            menu.style.top = newTop + 'px';
+            menu.style.left = newLeft + 'px';
+        }
     </script>
 
 </body>
