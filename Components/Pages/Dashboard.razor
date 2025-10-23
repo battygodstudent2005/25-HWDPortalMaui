@@ -2216,60 +2216,75 @@
         }
     }
 
-    // 計算各種狀態的數量
+    // 計算各種狀態的數量（修正版本）
     private int GetStatusCount(string status)
     {
-        if (projectData == null || projectData.Rows.Count == 0) return 0;
+        // [修正] 改為使用 filteredData 而非 projectData
+        if (filteredData == null || filteredData.Rows.Count == 0) return 0;
 
         int count = 0;
+        var today = DateTime.Today;
 
         // 遍歷所有非 Stage 和 Item 的專案欄位
-        foreach (DataColumn column in projectData.Columns)
+        foreach (DataColumn column in filteredData.Columns)
         {
             if (column.ColumnName == "Stage" || column.ColumnName == "Item") continue;
 
             // 遍歷該欄位下的所有儲存格
-            foreach (DataRow row in projectData.Rows)
+            foreach (DataRow row in filteredData.Rows)
             {
                 string cellValue = row[column].ToString() ?? "";
+                // 移除 * 標記以便正確判斷
+                string cleanValue = cellValue.Replace("*", "").Trim();
 
                 // 根據狀態類型進行計數
                 switch (status)
                 {
                     case "Non-Ready":
-                        if (cellValue.Contains("2999") ||
-                            cellValue.Equals("Non-Ready", StringComparison.OrdinalIgnoreCase) ||
-                            string.IsNullOrWhiteSpace(cellValue))
+                        if (cleanValue.Contains("2999") ||
+                            cleanValue.Contains("Non-Ready") ||
+                            string.IsNullOrWhiteSpace(cleanValue))
                         {
                             count++;
                         }
                         break;
 
                     case "Ready":
-                        if (cellValue.Contains("Ready") && !cellValue.Contains("Non-Ready"))
+                        if (cleanValue.Contains("Ready") && !cleanValue.Contains("Non-Ready"))
                         {
                             count++;
                         }
                         break;
 
                     case "Checked":
-                        if (cellValue.Contains("Checked"))
+                        if (cleanValue.Contains("Checked"))
                         {
                             count++;
                         }
                         break;
 
                     case "Approval":
-                        if (cellValue.Contains("Approval"))
+                        if (cleanValue.Contains("Approval"))
                         {
                             count++;
                         }
                         break;
 
                     case "Overdue":
+                        // [修正] 增加日期解析邏輯
+                        // 1. 先檢查是否包含 "!" 符號（舊資料）
                         if (cellValue.Contains("!"))
                         {
                             count++;
+                        }
+                        // 2. 嘗試解析日期（新資料）
+                        else if (DateTime.TryParse(cleanValue, out DateTime parsedDate))
+                        {
+                            // 如果日期早於今天，則視為過期
+                            if (parsedDate < today)
+                            {
+                                count++;
+                            }
                         }
                         break;
                 }
