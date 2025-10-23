@@ -63,7 +63,7 @@
                     @* 只有管理員才看得到的發送狀態按鈕 *@
                     @if (IsAdmin)
                     {
-                        @* [修改] 增加 disabled 狀態和載入動畫 *@
+                        @* 增加 disabled 狀態和載入動畫 *@
                         <button class="btn btn-warning btn-sm" @onclick="SendProjectStatus" disabled="@isSendingStatus">
                             @if (isSendingStatus)
                             {
@@ -671,7 +671,7 @@
         {
             // 重設旗標，避免重複執行
             _isContextMenuJustShown = false;
-            
+
             // 呼叫 JS 函式來調整選單的最終位置
             await JSRuntime.InvokeVoidAsync("adjustContextMenuPosition");
         }
@@ -763,8 +763,7 @@
                         <td>
                             <h3 style=""margin: 0 0 15px 0; font-family: Calibri, Arial, sans-serif;"">📈 狀態統計總覽</h3>
                             <p style=""font-size: 16px; margin: 10px 0; font-family: Calibri, Arial, sans-serif;"">
-                                <strong>專案總數：</strong>{totalProjects} 個專案 |
-                                <strong>目前顯示：</strong>{displayedProjects} 個專案
+                                <strong>專案總數：</strong>{totalProjects} 個專案
                             </p>
 
                             <!-- Status Cards Table -->
@@ -810,7 +809,7 @@
                     <tr>
                         <td>
                             <h3 style=""margin: 0 0 15px 0; font-family: Calibri, Arial, sans-serif;"">📋 專案資訊</h3>
-                            {projectDetailsTable}
+                        {projectDetailsTable}
                         </td>
                     </tr>
                 </table>
@@ -887,7 +886,7 @@
         };
     }
 
-    // 產生專案詳細資訊表格（含人員資訊）
+    // 產生專案詳細資訊表格（含人員資訊）- 修正版本
     private string GenerateProjectDetailsTable()
     {
         var dataToAnalyze = filteredData ?? projectData;
@@ -910,6 +909,7 @@
 
         // 計算每個專案的各狀態數量，並取得人員資訊
         var projectStats = new Dictionary<string, (string DM, string DL, string DE, int NonReady, int Ready, int Checked, int Approval, int Overdue)>();
+        var today = DateTime.Today; // 用於日期比較
 
         foreach (var projectName in projectColumns)
         {
@@ -921,10 +921,20 @@
                 string cellValue = row[projectName].ToString() ?? "";
                 string cleanValue = cellValue.Replace("*", "").Trim();
 
+                // [修正] 優先檢查舊資料格式（包含 "!" 符號）
                 if (cellValue.Contains("!"))
                 {
                     overdue++;
                 }
+                // 檢查新資料格式（日期過期）
+                else if (DateTime.TryParse(cleanValue, out DateTime parsedDate))
+                {
+                    if (parsedDate < today)
+                    {
+                        overdue++;
+                    }
+                }
+                // 檢查其他狀態
                 else if (cleanValue.Contains("Approval"))
                 {
                     approval++;
@@ -956,11 +966,11 @@
             projectStats[projectName] = (dm, dl, de, nonReady, ready, checked_, approval, overdue);
         }
 
-        // 產生 HTML 表格
+        // 產生 HTML 表格（此部分保持不變）
         var sb = new System.Text.StringBuilder();
 
         sb.AppendLine(@"
-    <table width=""100%"" cellpadding=""8"" cellspacing=""0"" style=""border-collapse: collapse; border: 1px solid #dee2e6; font-family: Calibri, Arial, sans-serif;"">
+        <table width=""100%"" cellpadding=""8"" cellspacing=""0"" style=""border-collapse: collapse; border: 1px solid #dee2e6; font-family: Calibri, Arial, sans-serif;"">
         <thead>
             <tr style=""background-color: #0d6efd; color: white;"">
                 <th style=""padding: 12px; text-align: left; border: 1px solid #0d6efd; font-family: Calibri, Arial, sans-serif;"">專案名稱</th>
@@ -1001,7 +1011,7 @@
 
         sb.AppendLine(@"
         </tbody>
-    </table>");
+        </table>");
 
         return sb.ToString();
     }
@@ -1028,6 +1038,9 @@
             .Where(c => c.ColumnName != "Stage" && c.ColumnName != "Item")
             .ToList();
 
+        // 在迴圈外宣告 today 變數，提升效能
+        var today = DateTime.Today;
+
         // 遍歷每個專案欄位的每個儲存格
         foreach (DataColumn column in projectColumns)
         {
@@ -1038,10 +1051,19 @@
                 // 清除 * 標記以便正確判斷
                 string cleanValue = cellValue.Replace("*", "").Trim();
 
-                // 優先檢查 Overdue（包含 "!" 符號）
+                // 優先檢查 Overdue (包含 "!" 符號)
                 if (cellValue.Contains("!"))
                 {
                     overdueCount++;
+                }
+                // 增加日期判斷邏輯 (取代原本空白的 else if)
+                else if (DateTime.TryParse(cleanValue, out DateTime parsedDate))
+                {
+                    // 如果解析出的日期早於今天，則視為過期
+                    if (parsedDate < today)
+                    {
+                        overdueCount++;
+                    }
                 }
                 // 檢查 Approval 狀態
                 else if (cleanValue.Contains("Approval"))
@@ -1933,7 +1955,7 @@
 
         string fullPath = Path.Combine(sowPath, SelectedYear.ToString(), selectedProjectName, selectedStage, selectedItem);
 
-        // [修改] 使用檔案總管開啟資料夾(若資料夾不在, 則先建立資料夾)
+        // 使用檔案總管開啟資料夾(若資料夾不在, 則先建立資料夾)
         try
         {
             // 檢查資料夾是否存在，若不存在則會自動建立所有層級的資料夾
@@ -2317,7 +2339,7 @@
                 .ToList();
         }
 
-        // [修改] 改為直接呼叫 Bootstrap 5 的 Javascript API 來顯示 Modal
+        // 改為直接呼叫 Bootstrap 5 的 Javascript API 來顯示 Modal
         // 這樣可以避免對自訂 JS 函式 (showBootstrapModal) 的依賴，在 Hybrid 環境中更為穩健
         await JSRuntime.InvokeVoidAsync("eval", $"new bootstrap.Modal(document.getElementById('projectInfoModal')).show()");
         // StateHasChanged();
