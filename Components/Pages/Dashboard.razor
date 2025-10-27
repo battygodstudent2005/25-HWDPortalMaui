@@ -886,7 +886,7 @@
         };
     }
 
-    // 產生專案詳細資訊表格（含人員資訊）
+    // 產生專案詳細資訊表格(mail)
     private string GenerateProjectDetailsTable()
     {
         var dataToAnalyze = filteredData ?? projectData;
@@ -1013,7 +1013,7 @@
         return sb.ToString();
     }
 
-    // 重新計算狀態統計（修正版本）
+    // 計算狀態統計(mail)
     private (int NonReady, int Ready, int Checked, int Approval, int Overdue) CalculateStatusSummary()
     {
         // 使用 filteredData 來計算目前顯示的資料
@@ -1048,40 +1048,31 @@
                 // 清除 * 標記以便正確判斷
                 string cleanValue = cellValue.Replace("*", "").Trim();
 
-                // 優先檢查 Overdue (包含 "!" 符號)
-                if (cellValue.Contains("!"))
+
+                if(cleanValue.Contains("Ready") && !cleanValue.Contains("Non-Ready"))
                 {
-                    overdueCount++;
+                    readyCount++;
                 }
-                // 增加日期判斷邏輯 (取代原本空白的 else if)
-                else if (DateTime.TryParse(cleanValue, out DateTime parsedDate))
-                {
-                    // 如果解析出的日期早於今天，則視為過期
-                    if (parsedDate < today)
-                    {
-                        overdueCount++;
-                    }
-                }
-                // 檢查 Approval 狀態
-                else if (cleanValue.Contains("Approval"))
-                {
-                    approvalCount++;
-                }
-                // 檢查 Checked 狀態
                 else if (cleanValue.Contains("Checked"))
                 {
                     checkedCount++;
                 }
-                // 檢查 Ready 狀態（排除 Non-Ready）
-                else if (cleanValue.Contains("Ready") && !cleanValue.Contains("Non-Ready"))
+                else if (cleanValue.Contains("Approval"))
                 {
-                    readyCount++;
+                    approvalCount++;
                 }
-                // Non-Ready
-                else if (cleanValue.Contains("Non-Ready") ||
-                         cleanValue.Contains("2999") ||
-                         cleanValue.Contains("/") ||
-                         cleanValue.Contains("年"))
+                else if (DateTime.TryParse(cleanValue, out DateTime parsedDate))
+                {
+                    if (parsedDate < today)
+                    {
+                        overdueCount++;
+                    }
+                    else
+                    {
+                        nonReadyCount++;
+                    }
+                }
+                else if (cleanValue.Contains("Non-Ready"))
                 {
                     nonReadyCount++;
                 }
