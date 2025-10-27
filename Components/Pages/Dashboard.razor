@@ -809,7 +809,7 @@
                     <tr>
                         <td>
                             <h3 style=""margin: 0 0 15px 0; font-family: Calibri, Arial, sans-serif;"">📋 專案資訊</h3>
-                        {projectDetailsTable}
+    {projectDetailsTable}
                         </td>
                     </tr>
                 </table>
@@ -860,8 +860,8 @@
         // TODO: 這裡應該從資料庫或設定檔讀取，目前先使用硬編碼
         return department switch
         {
-            "HW1" => "HW1_Manager@compal.com;HW1_Lead@compal.com",
-            "HW2" => "HW2_Manager@compal.com;HW2_Lead@compal.com",
+            "HW1" => "MikeMY_Wu@compal.com;NeilWC_Lin@compal.com",
+            "HW2" => "Carlos_Wang@compal.com;Tom_Chiu@compal.com",
             "HW3" => "HW3_Manager@compal.com;HW3_Lead@compal.com",
             "HW4" => "HW4_Manager@compal.com;HW4_Lead@compal.com",
             "PWR1" => "MikeMY_Wu@compal.com;NeilWC_Lin@compal.com",
@@ -886,7 +886,7 @@
         };
     }
 
-    // 產生專案詳細資訊表格（含人員資訊）- 修正版本
+    // 產生專案詳細資訊表格（含人員資訊）
     private string GenerateProjectDetailsTable()
     {
         var dataToAnalyze = filteredData ?? projectData;
@@ -921,37 +921,34 @@
                 string cellValue = row[projectName].ToString() ?? "";
                 string cleanValue = cellValue.Replace("*", "").Trim();
 
-                // [修正] 優先檢查舊資料格式（包含 "!" 符號）
-                if (cellValue.Contains("!"))
+                if (cleanValue.Contains("Ready") && !cleanValue.Contains("Non-Ready"))
                 {
-                    overdue++;
+                    ready++;
                 }
-                // 檢查新資料格式（日期過期）
+                else if (cleanValue.Contains("Checked"))
+                {
+                    checked_++;
+                }
+                else if (cleanValue.Contains("Approval"))
+                {
+                    approval++;
+                }
                 else if (DateTime.TryParse(cleanValue, out DateTime parsedDate))
                 {
                     if (parsedDate < today)
                     {
                         overdue++;
                     }
+                    else
+                    {
+                        nonReady++;
+                    }
                 }
-                // 檢查其他狀態
-                else if (cleanValue.Contains("Approval"))
-                {
-                    approval++;
-                }
-                else if (cleanValue.Contains("Checked"))
-                {
-                    checked_++;
-                }
-                else if (cleanValue.Contains("Ready") && !cleanValue.Contains("Non-Ready"))
-                {
-                    ready++;
-                }
-                else if (cleanValue.Contains("Non-Ready") || cleanValue.Contains("2999") ||
-                         string.IsNullOrWhiteSpace(cleanValue) || cleanValue.Contains("年"))
+                else if (cleanValue.Contains("Non-Ready"))
                 {
                     nonReady++;
                 }
+
             }
 
             // 取得專案人員資訊
@@ -1080,10 +1077,10 @@
                 {
                     readyCount++;
                 }
-                // Non-Ready 或空白
+                // Non-Ready
                 else if (cleanValue.Contains("Non-Ready") ||
                          cleanValue.Contains("2999") ||
-                         string.IsNullOrWhiteSpace(cleanValue) ||
+                         cleanValue.Contains("/") ||
                          cleanValue.Contains("年"))
                 {
                     nonReadyCount++;
@@ -1918,7 +1915,7 @@
         if (cellValue.Contains("2999")) return "Non-Ready";
         return cellValue.Replace("#", "").Replace("!", "");
     }
-    
+
     private async Task OpenProjectFolderPath()
     {
         // 檢查是否已選擇有效的儲存格，邏輯與上傳/下載功能對齊
@@ -2241,7 +2238,7 @@
     // 計算各種狀態的數量（修正版本）
     private int GetStatusCount(string status)
     {
-        // [修正] 改為使用 filteredData 而非 projectData
+        // 改為使用 filteredData 而非 projectData
         if (filteredData == null || filteredData.Rows.Count == 0) return 0;
 
         int count = 0;
@@ -2263,11 +2260,33 @@
                 switch (status)
                 {
                     case "Non-Ready":
-                        if (cleanValue.Contains("2999") ||
-                            cleanValue.Contains("Non-Ready") ||
-                            string.IsNullOrWhiteSpace(cleanValue))
+                        // [修改] 檢查是否為 Non-Ready 狀態 (包含 "年", "/", "Non-Ready")
+                        if (cleanValue.Contains("年") ||
+                            cleanValue.Contains("/") ||
+                            cleanValue.Contains("Non-Ready"))
                         {
-                            count++;
+                            // 在計算 Non-Ready 之前，必須先排除掉已過期的項目
+                            bool isOverdue = false;
+
+                            // 檢查 Overdue 條件 1: 包含 "!"
+                            if (cellValue.Contains("!"))
+                            {
+                                isOverdue = true;
+                            }
+                            // 檢查 Overdue 條件 2: 日期已過期
+                            else if (DateTime.TryParse(cleanValue, out DateTime parsedDate))
+                            {
+                                if (parsedDate < today)
+                                {
+                                    isOverdue = true;
+                                }
+                            }
+
+                            // 只有在 "不是 Overdue" 的情況下，才計入 Non-Ready
+                            if (!isOverdue)
+                            {
+                                count++;
+                            }
                         }
                         break;
 
@@ -2293,7 +2312,7 @@
                         break;
 
                     case "Overdue":
-                        // [修正] 增加日期解析邏輯
+                        // 增加日期解析邏輯
                         // 1. 先檢查是否包含 "!" 符號（舊資料）
                         if (cellValue.Contains("!"))
                         {
@@ -2579,7 +2598,7 @@
         string connectionString = _configuration.GetConnectionString("WriteConnection_A31_HWD");
         if (string.IsNullOrEmpty(connectionString))
         {
-            // [修正] 錯誤訊息中的連線字串名稱應與程式碼一致
+            // 錯誤訊息中的連線字串名稱應與程式碼一致
             Debug.WriteLine("無法記錄審核操作：未設定 'WriteConnection_A31_HWD' 連線字串。");
             return;
         }
@@ -2710,7 +2729,7 @@
                         {
                             ItemKey = itemKey,
                             DisplayName = displayName
-                            // Date 預設為 null
+                        // Date 預設為 null
                         });
                 }
             }
@@ -2888,19 +2907,20 @@
         {
             var itemToUpdate = row["Item"]?.ToString()?.Trim();
             if (string.IsNullOrEmpty(itemToUpdate)) continue;
-
             var currentCellValue = row[projectName]?.ToString() ?? "";
             // 如果儲存格的值包含 "年" 這個關鍵字，就代表它是日期格式
             // 且不為 "Ready", "Checked", "Approval" 等狀態時
             // 就將其初始值設定為 "Non-Ready"
-            if (currentCellValue.Contains("年") || currentCellValue.Contains("/"))
+            if ((currentCellValue.Contains("年") || currentCellValue.Contains("/"))
+                && !currentCellValue.Contains("!")
+                && !currentCellValue.Contains("#"))
             {
                 var stage = projectData.Columns.Contains("Stage") ? row["Stage"]?.ToString() ?? "" : "";
                 row[projectName] = "Non-Ready";
                 updatesToCommit.Add((stage, itemToUpdate, "Non-Ready"));
             }
         }
-        
+
 
         try
         {
@@ -2918,6 +2938,7 @@
                 tableNameDepartment = "硬體部";
             }
 
+            // 從SQL 讀取 Project MileStone
             var projectMilestones = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             string infoTableName = $"ProjectDashboard_A31_HWD_{tableNameDepartment}_ProjectInfo";
             string scheduleQuery = $"SELECT Schedule FROM [{infoTableName}] WHERE ProjectCode = @ProjectCode AND Year = @Year";
@@ -2990,7 +3011,11 @@
                     continue;
                 }
 
-
+                string abc = "";
+                if (cleanedCellValue.ToString().IndexOf("!")>-1)
+                {
+                    abc += "ABC";
+                }
                 // Debug: 顯示正在處理的 Item 名稱
                 Debug.WriteLine($"[DEBUG] Processing Item: '{itemToUpdate}'");
                 if (sowRules.TryGetValue(itemToUpdate, out var dDateRule))
@@ -3010,7 +3035,10 @@
                         row[projectName] = dateValue;
 
                         var stage = row["Stage"]?.ToString() ?? "";
-                        updatesToCommit.RemoveAll(u => (u.Item?.Trim() ?? "").Equals(itemToUpdate, StringComparison.OrdinalIgnoreCase));
+                        updatesToCommit.RemoveAll(u =>
+                        (u.Item?.Trim() ?? "").Equals(itemToUpdate, StringComparison.OrdinalIgnoreCase) &&
+                        (u.Stage?.Trim() ?? "").Equals(stage.Trim(), StringComparison.OrdinalIgnoreCase)
+                    );
 
                         // 將乾淨的日期 (dateValue) 加入待辦清單
                         updatesToCommit.Add((stage, itemToUpdate, dateValue));
