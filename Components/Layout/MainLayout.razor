@@ -41,22 +41,10 @@ else if (UserInfo.IsUserValid)
                 @if (UserInfo.IsUserValid && !string.IsNullOrEmpty(UserInfo.UserName))
                 {
                     // 當使用者驗證成功時，顯示使用者資訊和選單
-                    <div class="dropdown">
-                        <a href="#" class="d-flex align-items-center text-dark text-decoration-none dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="bi bi-person-circle me-2" style="font-size: 1.2rem; color: #343a40;"></i>
-                            <span>@UserInfo.UserName</span> @* 直接從 UserInfo 服務顯示使用者名稱 *@
-                        </a>
-                        <ul class="dropdown-menu text-small shadow">
-                            @* 在 MAUI Hybrid 應用中，身份驗證是跟隨 Windows 登入，
-                               通常沒有傳統的 "登出" 按鈕，可以考慮移除此項目，或讓它關閉應用程式。
-                            <li>
-                                <a class="dropdown-item" href="#">
-                                    <i class="bi bi-box-arrow-right me-2"></i>
-                                    <span>登出</span>
-                                </a>
-                            </li>
-                            *@
-                        </ul>
+                    // [修改] 移除 dropdown 相關標籤與屬性，改為靜態顯示區塊
+                    <div class="d-flex align-items-center text-dark text-decoration-none">
+                        <i class="bi bi-person-circle me-2" style="font-size: 1.2rem; color: #343a40;"></i>
+                        <span>@UserInfo.UserName</span> @* 直接從 UserInfo 服務顯示使用者名稱 *@
                     </div>
                 }
                 else

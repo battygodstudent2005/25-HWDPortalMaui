@@ -13,7 +13,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" @onclick="Close"></button>
             </div>
             <div class="modal-body">
-                @* [新增] 顯示已存在檔案的區塊 *@
+                @* 顯示已存在檔案的區塊 *@
                 @if (existingFiles.Any())
                 {
                     <h6 class="list-title">
@@ -37,7 +37,7 @@
                     </div>
                 }
 
-                @* [新增] 分隔線與標題 *@
+                @* 分隔線與標題 *@
                 <h6 class="list-title">
                     <i class="bi bi-file-earmark-arrow-up me-2"></i>新增或覆蓋檔案
                 </h6>
@@ -114,7 +114,7 @@
     [Parameter] public string TargetUploadPath { get; set; } = string.Empty;
     // OnUploadsCompleted 的簽名，使其能夠回傳上傳成功的檔案名稱列表
     [Parameter] public EventCallback<List<string>> OnUploadsCompleted { get; set; }
-    // [新增] 檔案刪除後觸發的事件回呼，用於通知父元件
+    // 檔案刪除後觸發的事件回呼，用於通知父元件
     [Parameter] public EventCallback<string> OnFileDeleted { get; set; }
 
     // 追蹤每個檔案獨立狀態的內部 class
@@ -136,18 +136,19 @@
     private string uploadProgress = "0%";
 
     // 供父元件呼叫以顯示此 Modal 的方法
-    public async Task Show(string targetPath) // [修改] 改為 async Task
+    public async Task Show(string targetPath) // 改為 async Task
     {
         TargetUploadPath = targetPath;
-        // [新增] 清空上一次的狀態
+        // 清空上一次的狀態
         fileList.Clear();
         existingFiles.Clear();
         isUploading = false;
         uploadProgress = "0%";
 
-        await JSRuntime.InvokeVoidAsync("showBootstrapModal", "fileUploadModal");
+        //改用標準 Bootstrap 5 API 來顯示 Modal，確保與 Dashboard.razor 一致
+        await JSRuntime.InvokeVoidAsync("eval", "new bootstrap.Modal(document.getElementById('fileUploadModal')).show()");
 
-        // [新增] 載入已存在的檔案清單
+        // 載入已存在的檔案清單
         LoadExistingFiles();
         StateHasChanged();
     }
@@ -156,12 +157,12 @@
     public async Task Close()
     {
         fileList.Clear();
-        existingFiles.Clear(); // [新增] 關閉時也清除已存在檔案列表
+        existingFiles.Clear(); // 關閉時也清除已存在檔案列表
         isUploading = false;
-        await JSRuntime.InvokeVoidAsync("hideBootstrapModal", "fileUploadModal");
+        await JSRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('fileUploadModal'))?.hide()");
     }
 
-    // [新增] 載入目標路徑下已存在的檔案
+    // 載入目標路徑下已存在的檔案
     private void LoadExistingFiles()
     {
         try
@@ -181,7 +182,7 @@
         }
     }
 
-    // [新增] 刪除指定檔案的邏輯
+    // 刪除指定檔案的邏輯
     private async Task DeleteFile(string fileNameToDelete)
     {
         var fullPath = Path.Combine(TargetUploadPath, fileNameToDelete);
@@ -281,7 +282,7 @@
         isUploading = false;
         uploadProgress = $"{completedFiles}/{fileList.Count} 完成";
 
-        // [新增] 上傳完成後，清空待上傳列表並重新載入資料夾中的檔案
+        // 上傳完成後，清空待上傳列表並重新載入資料夾中的檔案
         fileList.Clear();
         LoadExistingFiles();
         StateHasChanged();

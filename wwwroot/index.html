@@ -49,14 +49,14 @@
             toastElement.setAttribute('aria-atomic', 'true');
 
             toastElement.innerHTML = `
-                    <div class="d-flex">
-                        <div class="toast-body">
-                            <i class="bi ${details.icon} me-2"></i>
-                            ${message}
+                        <div class="d-flex">
+                            <div class="toast-body">
+                                <i class="bi ${details.icon} me-2"></i>
+                                ${message}
+                            </div>
+                            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
                         </div>
-                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-                    </div>
-                `;
+                    `;
 
             // 將建立好的 Toast 元素加入到容器中
             toastContainer.appendChild(toastElement);
@@ -118,6 +118,35 @@
             // 6. 套用計算後的最終位置
             menu.style.top = newTop + 'px';
             menu.style.left = newLeft + 'px';
+        }
+        // [新增] 處理 .NET 檔案串流並觸發下載的函式
+        window.downloadFileFromStream = async (fileName, contentStreamReference) => {
+            try {
+                // 將 .NET 串流轉換為 JavaScript 可讀取的 ArrayBuffer
+                const arrayBuffer = await contentStreamReference.arrayBuffer();
+
+                // 建立一個 Blob 物件 (二進位大型物件)
+                const blob = new Blob([arrayBuffer]);
+
+                // 為這個 Blob 建立一個暫時的 URL
+                const url = URL.createObjectURL(blob);
+
+                // 建立一個隱藏的 <a> (連結) 元素
+                const anchorElement = document.createElement('a');
+                anchorElement.href = url;
+
+                // 設定要下載的檔案名稱
+                anchorElement.download = fileName ?? '';
+
+                // 模擬點擊這個連結以觸發下載
+                anchorElement.click();
+
+                // 清理：移除 <a> 元素並釋放 URL
+                anchorElement.remove();
+                URL.revokeObjectURL(url);
+            } catch (e) {
+                console.error("下載檔案時發生錯誤: ", e);
+            }
         }
     </script>
 

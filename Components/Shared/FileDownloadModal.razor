@@ -123,7 +123,8 @@
         isLoading = true;
         isDownloading = false;
 
-        await JSRuntime.InvokeVoidAsync("showBootstrapModal", "fileDownloadModal");
+        // 改用標準 Bootstrap 5 API 來顯示 Modal
+        await JSRuntime.InvokeVoidAsync("eval", "new bootstrap.Modal(document.getElementById('fileDownloadModal')).show()");
         StateHasChanged(); // 顯示載入中動畫
 
         // 異步載入檔案清單
@@ -136,7 +137,7 @@
     // 關閉 Modal
     public async Task Close()
     {
-        await JSRuntime.InvokeVoidAsync("hideBootstrapModal", "fileDownloadModal");
+        await JSRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('fileDownloadModal'))?.hide()");
     }
 
     // 從指定路徑載入檔案
