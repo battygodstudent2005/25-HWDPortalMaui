@@ -694,12 +694,37 @@
     // 處理儲存格雙點擊事件
     private async Task HandleCellDoubleClick(DataRow row, DataColumn column)
     {
-        // 1. 執行單點擊的選取邏輯 (此方法內部會檢查是否為 Stage/Item 欄)
-        // 這會設定 selectedProjectName, selectedStage, selectedItem
-        SelectCell(row, column);
+        // [修改] 增加防呆：先檢查點擊的儲存格是否有效 (非 Stage/Item 欄，且非彙總列)
+        if (column.ColumnName == "Stage" || column.ColumnName == "Item")
+        {
+            return; // 點擊這兩欄不觸發任何動作
+        }
+
+        // [修改] 檢查點擊的是否為彙總列 (Item 欄位為空)，並同時取得所需資訊
+        string stage = row["Stage"]?.ToString() ?? "";
+        string item = row["Item"]?.ToString() ?? "";
+        string projectName = column.ColumnName;
+
+        if (string.IsNullOrEmpty(item))
+        {
+            // 顯示提示訊息，告知使用者此為彙總列
+            await JSRuntime.InvokeVoidAsync("showToast", "此為彙總列，無法開啟路徑。", "warning");
+            return; // 中斷執行，不進行選取或開啟資料夾
+        }
+
+        // [修改] 移除 SelectCell(row, column);
+        // [新增] 改為在此處"強制設定"選取狀態，確保上下文正確，避免被 onclick 事件的 toggle 邏輯干擾
+        string cellKey = $"{stage}_{item}_{projectName}";
+        selectedCellKey = cellKey;
+        selectedProjectName = projectName;
+        selectedStage = stage;
+        selectedItem = item;
+
+        // [新增] 呼叫 StateHasChanged() 確保 UI (例如儲存格反白) 立即更新
+        StateHasChanged();
 
         // 2. 執行開啟資料夾的邏輯
-        // 此方法會使用 SelectCell 所設定的變數
+        // 此方法會使用我們剛剛強制設定的變數
         await OpenProjectFolderPath();
     }
     // 發送專案 Status 的方法
@@ -1712,7 +1737,6 @@
         if (projectData == null || projectData.Columns.Count == 0) return;
 
         // --- 步驟 1: 篩選資料列 (Row Filtering) ---
-
         var query = projectData.AsEnumerable();
 
         // 根據 "Item" 搜尋框篩選
@@ -1721,18 +1745,34 @@
             query = query.Where(row => row.Field<string>("Item")?.Contains(itemSearchTerm, StringComparison.OrdinalIgnoreCase) ?? false);
         }
 
-        // 如果啟用 Overdue 篩選，則只保留至少包含一個 "!" 的資料列
+        // [修改] 增加日期判斷以支援新的 Overdue 邏輯
         if (isOverdueFilterActive)
         {
+            var today = DateTime.Today; // [新增] 定義今天日期
             var projectColumnsForRowFilter = projectData.Columns.Cast<DataColumn>()
                 .Where(c => c.ColumnName != "Stage" && c.ColumnName != "Item")
-                .Select(c => c.ColumnName)
-                .ToList();
+                .Select(c => c.ColumnName).ToList();
 
+            // [修改] 更新篩選邏輯
             query = query.Where(row =>
-                projectColumnsForRowFilter.Any(colName => (row[colName]?.ToString() ?? "").Contains("!"))
+                projectColumnsForRowFilter.Any(colName =>
+                {
+                    string cellValue = row[colName]?.ToString() ?? "";
+
+                    // [修改] 條件 1: 包含 !
+                    if (cellValue.Contains("!")) return true;
+
+                    // [修改] 條件 2: 日期已過期
+                    string cleanValue = cellValue.Replace("*", "").Trim();
+                    if (DateTime.TryParse(cleanValue, out DateTime parsedDate))
+                    {
+                        if (parsedDate < today) return true;
+                    }
+                    return false;
+                })
             );
         }
+
 
         // 將篩選後的資料列存入一個暫存 DataTable
         DataTable rowFilteredTable;
@@ -1754,21 +1794,36 @@
             .Select(c => c.ColumnName)
             .ToList();
 
-        // 如果啟用 Overdue 篩選，則只保留至少包含一個 "!" 的專案欄位
-        // 這裡我們檢查整個 projectData，以確保即使過期的項目被 itemSearchTerm 過濾掉，其對應的專案欄位依然能被正確判斷
+        // [修改] 增加日期判斷以支援新的 Overdue 邏輯
         if (isOverdueFilterActive)
         {
+            var today = DateTime.Today; // [新增] 定義今天日期
             columnsToShow = columnsToShow.Where(colName =>
-                projectData.AsEnumerable().Any(row => (row[colName]?.ToString() ?? "").Contains("!"))
+                projectData.AsEnumerable().Any(row =>
+                {
+                    string cellValue = row[colName]?.ToString() ?? "";
+
+                    // [修改] 條件 1: 包含 !
+                    if (cellValue.Contains("!")) return true;
+
+                    // [修改] 條件 2: 日期已過期
+                    string cleanValue = cellValue.Replace("*", "").Trim();
+                    if (DateTime.TryParse(cleanValue, out DateTime parsedDate))
+                    {
+                        if (parsedDate < today) return true;
+                    }
+                    return false;
+                })
             ).ToList();
         }
+
 
         // 根據 "專案名稱" 搜尋框，從已篩選的欄位列表中再次篩選
         if (!string.IsNullOrWhiteSpace(searchTerm))
         {
             columnsToShow = columnsToShow
                 .Where(c => c.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
-                .ToList();
+                .ToList(); 
         }
 
 
@@ -1788,7 +1843,7 @@
         // --- 步驟 4: 套用排序 ---
         if (!string.IsNullOrEmpty(sortColumn) && filteredData.Columns.Contains(sortColumn))
         {
-            ApplySort();
+            ApplySort(); 
         }
 
         StateHasChanged();
