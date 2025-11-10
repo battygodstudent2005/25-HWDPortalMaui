@@ -23,7 +23,7 @@
             </div>
             <div class="card-body py-2">
                 <div class="row g-2">
-                    <div class="col-md-6">
+                    <div class="col-md-3">
                         <label for="year-select" class="form-label mb-1 small">選擇年份：</label>
                         @* 將 @bind 改為 value 和 @onchange 事件處理 *@
                         <select id="year-select" class="form-select form-select-sm" value="@SelectedYear" @onchange="OnYearChanged">
@@ -33,7 +33,22 @@
                             }
                         </select>
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-5">
+
+                        <label for="phase-rule-select" class="form-label mb-1 small">選擇Phase Rule：</label>
+                        <select id="phase-rule-select"
+                                class="form-select form-select-sm"
+                                value="@SelectedPhaseRule"
+                                @onchange="OnPhaseRuleChanged"
+                                disabled="@(SelectedYear <= 2025)">
+
+                            @foreach (var rule in PhaseRuleList)
+                            {
+                                <option value="@rule">@rule</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-4">
                         <label for="item-select" class="form-label mb-1 small">選擇部門：</label>
                         @* 將 @bind 改為 value 和 @onchange 事件處理 *@
                         <select id="item-select" class="form-select form-select-sm" value="@SelectedHwOption" @onchange="OnDepartmentChanged">
@@ -467,7 +482,7 @@
 
 @* 新增專案資訊 Modal *@
 <div class="modal fade" id="addProjectModal" tabindex="-1" aria-labelledby="addProjectModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header bg-info text-white">
                 <h5 class="modal-title" id="addProjectModalLabel">
@@ -486,7 +501,9 @@
                                 </div>
                                 <div class="card-body">
                                     <div class="row g-3">
-                                        <div class="col-md-3">
+
+                                        <div class="col-md-2">
+                                            @* 調整欄寬以容納 Phase Rule *@
                                             <label for="newProjectYear" class="form-label">選擇年份</label>
                                             <select id="newProjectYear" class="form-select" @bind="newProjectYear" @bind:after="OnNewProjectContextChanged">
                                                 @foreach (var year in YearList)
@@ -496,18 +513,54 @@
                                             </select>
                                         </div>
                                         <div class="col-md-3">
-                                            <label for="newProjectDepartment" class="form-label">選擇部門</label>
-                                            <select id="newProjectDepartment" class="form-select" @bind="newProjectDepartment" @bind:after="OnNewProjectContextChanged">
-                                                @foreach (var option in AllOptions)
+                                            @* 調整欄寬 *@
+
+                                            <label for="new-phase-rule-select" class="form-label">Phase Rule</label>
+
+                                            <select id="new-phase-rule-select" class="form-select" @bind="newProjectPhaseRule" @bind:after="OnNewProjectContextChanged"
+                                                    disabled="@(newProjectYear <= 2025)">
+
+                                                @if (newProjectYear <= 2025)
                                                 {
-                                                    <option value="@option">@option</option>
+
+                                                    <option value="N/A">N/A</option>
                                                 }
+
+                                                else
+                                                {
+
+                                                    <option value="3-Phase">3-Phase</option>
+                                                    <option value="2-Phase w/o EVT">2-Phase w/o EVT</option>
+
+                                                    <option value="2-Phase w/o DVT2">2-Phase w/o DVT2</option>
+                                                }
+
                                             </select>
                                         </div>
-                                        <div class="col-md-6">
-                                            <label for="newProjectName" class="form-label">專案名稱</label>
-                                            <input type="text" id="newProjectName" class="form-control" @bind="newProjectName" placeholder="請輸入專案代碼 (例如 CSLP_PTL)" />
+
+                                        <div class="col-md-2">
+                                            @* 調整欄寬 *@
+                                            <label for="newProjectDepartment" class="form-label">選擇部門</label>
+
+                                            <select id="newProjectDepartment" class="form-select" @bind="newProjectDepartment" @bind:after="OnNewProjectContextChanged">
+                                                @foreach (var option in AllOptions)
+
+                                                {
+                                                    <option value="@option">@option</option>
+
+                                                }
+                                            </select>
+
                                         </div>
+                                        <div class="col-md-5">
+                                            @* 保持欄寬 (2+2+2+6 = 12) *@
+                                            <label for="newProjectName" class="form-label">專案名稱</label>
+
+                                            <input type="text" id="newProjectName" class="form-control" @bind="newProjectName" placeholder="請輸入專案代碼與名稱 例如 LDH50(WLK MLK2-DDR5)" />
+                                        </div>
+
+                                        @* [移除] Phase Rule 區塊 (原 source 130-139) 已移至上方 *@
+
                                     </div>
                                 </div>
                             </div>
@@ -557,6 +610,7 @@
                                         <label for="newPersonDE" class="form-label">專案工程師 (DE)</label>
                                         <input type="text" id="newPersonDE" class="form-control" @bind="newProjectPersonnel.DE" placeholder="請輸入 AD Account" />
                                     </div>
+                                    
                                 </div>
                             </div>
                         </div>
@@ -661,6 +715,7 @@
     private List<MilestoneInfo> newProjectMilestones = new List<MilestoneInfo>();
     private ProjectPersonnel newProjectPersonnel = new ProjectPersonnel();
     private bool isSavingNewProject = false; // 控制新增 Modal 儲存按鈕的載入狀態
+    private string newProjectPhaseRule { get; set; } = "N/A"; // 用於 "新增專案資訊" Modal 的 Phase Rule 欄位
     private bool isOverdueFilterActive = false; // 用於追蹤 Overdue 篩選器是否啟用
 
     // 覆寫 OnAfterRenderAsync
@@ -1539,15 +1594,42 @@
     // 改為自動屬性，邏輯移至 OnDepartmentChanged 事件處理常式
     private string? SelectedHwOption { get; set; }
 
+    // Phase Rule 篩選器相關
+    private List<string> PhaseRuleList { get; set; } = new() { "N/A", "3-Phase", "2-Phase w/o EVT", "2-Phase w/o DVT2" };
+
+    // 儲存選定的 Phase Rule，預設為 "N/A"
+    private string SelectedPhaseRule { get; set; } = "N/A";
+
     // 年份選擇變更時的事件處理常式
     private async Task OnYearChanged(ChangeEventArgs e)
     {
         if (int.TryParse(e.Value?.ToString(), out int selectedYear))
         {
             SelectedYear = selectedYear;
+
+            // 根據年份變動，動態決定 Phase Rule 的狀態與內容
+            if (SelectedYear <= 2025)
+            {
+                // 清空 PhaseRuleList 並只加入 "N/A"
+                PhaseRuleList.Clear();
+                PhaseRuleList.Add("N/A");
+                SelectedPhaseRule = "N/A"; // 如果年份 <= 2025，自動重設 Phase Rule
+            }
+            else
+            {
+                // 清空 PhaseRuleList 並加入 Phase 選項
+                PhaseRuleList.Clear();
+                PhaseRuleList.Add("3-Phase");
+                PhaseRuleList.Add("2-Phase w/o EVT");
+                PhaseRuleList.Add("2-Phase w/o DVT2");
+                SelectedPhaseRule = "3-Phase"; // 預設選取 "3-Phase"
+            }
+
+            // 原有邏輯
             await LoadProjectData();
-            await LoadAllProjectDetailsAsync();
+            // 當年份變更時，必須重新載入對應年份的 SOW 時程範本
             await LoadMilestoneData();
+            await LoadAllProjectDetailsAsync();
         }
     }
 
@@ -1556,6 +1638,22 @@
     {
         SelectedHwOption = e.Value?.ToString();
         await LoadProjectData();
+        await LoadAllProjectDetailsAsync();
+    }
+
+    // Phase Rule 選擇變更時的事件處理常式
+    private async Task OnPhaseRuleChanged(ChangeEventArgs e)
+    {
+        SelectedPhaseRule = e.Value?.ToString() ?? "N/A";
+
+        // 呼叫 LoadProjectData()，與年份和部門的變更處理邏輯保持一致
+        // 您後續可能需要修改 LoadProjectData() 來實際應用此篩選
+        await LoadProjectData();
+
+        // 切換 Phase Rule 時, 必須重新載入 SOW 時程範本 (編輯專案時使用)
+        await LoadMilestoneData();
+
+        // 接著也必須重新載入所有專案的詳細資訊 (因為 Milestones 範本已變更)
         await LoadAllProjectDetailsAsync();
     }
 
@@ -1681,6 +1779,19 @@
     private async Task LoadMilestoneData()
     {
         string readsheet = $"ProjectDashboard_A31_HWD_電源部_SOW_{SelectedYear}";
+        if (SelectedPhaseRule == "3-Phase")
+        {
+            readsheet += "_3Phase";
+        }
+        else if (SelectedPhaseRule == "2-Phase w/o EVT")
+        {
+            readsheet += "_2PhaseWithoutEVT";
+        }
+        else if (SelectedPhaseRule == "2-Phase w/o DVT2")
+        {
+            readsheet += "_2PhaseWithoutDVT2";
+        }
+
         milestoneData = await Task.Run(() => ReadSQLdata(readsheet));
 
         // 這一步實現了您的核心需求：
@@ -1724,6 +1835,18 @@
         var data = await Task.Run(() =>
         {
             string tableName = $"ProjectDashboard_{SelectedHwOption}_{SelectedYear}";
+            if (SelectedPhaseRule == "3-Phase")
+            {
+                tableName += "_3Phase";
+            }
+            else if (SelectedPhaseRule == "2-Phase w/o EVT")
+            {
+                tableName += "_2PhaseWithoutEVT";
+            }
+            else if (SelectedPhaseRule == "2-Phase w/o DVT2")
+            {
+                tableName += "_2PhaseWithoutDVT2";
+            }
             return ReadSQLdata(tableName);
         });
         if (data != null && data.Columns.Count > 0) data.Columns.RemoveAt(0);
@@ -2830,9 +2953,18 @@
         newProjectYear = SelectedYear;
         newProjectDepartment = SelectedHwOption;
 
+        // 根據帶入的年份 (newProjectYear)，決定 Phase Rule 的預設值
+        if (newProjectYear <= 2025)
+        {
+            newProjectPhaseRule = "N/A";
+        }
+        else
+        {
+            newProjectPhaseRule = "3-Phase"; // 預設值改為 "3-Phase"
+        }
+
         // 根據預設的年分與部門載入對應的 Milestone 範本
         await LoadMilestonesForNewProject();
-
         // 顯示 Modal
         await JSRuntime.InvokeVoidAsync("eval", "new bootstrap.Modal(document.getElementById('addProjectModal')).show()");
     }
@@ -2840,6 +2972,19 @@
     // 當新增 Modal 中的年份或部門變更時，重新載入 Milestone 範本
     private async Task OnNewProjectContextChanged()
     {
+        // 根據 newProjectYear 變動，同步更新 newProjectPhaseRule 的預設值
+        if (newProjectYear <= 2025)
+        {
+            newProjectPhaseRule = "N/A";
+        }
+        else
+        {
+            if (newProjectPhaseRule == "N/A")
+            {
+                newProjectPhaseRule = "3-Phase";
+            }
+        }
+
         await LoadMilestonesForNewProject();
     }
 
@@ -2849,6 +2994,19 @@
         // 此處邏輯與 LoadMilestoneData 幾乎相同，但操作的是 newProjectMilestones
         // 注意：此處假設所有部門的 SOW 範本都來自 "電源部"，與現有邏輯一致
         string readsheet = $"ProjectDashboard_A31_HWD_電源部_SOW_{newProjectYear}";
+        if (newProjectPhaseRule == "3-Phase")
+        {
+            readsheet += "_3Phase";
+        }
+        else if (newProjectPhaseRule == "2-Phase w/o EVT")
+        {
+            readsheet += "_2PhaseWithoutEVT";
+        }
+        else if (newProjectPhaseRule == "2-Phase w/o DVT2")
+        {
+            readsheet += "_2PhaseWithoutDVT2";
+        }
+
         var milestoneTemplateData = await Task.Run(() => ReadSQLdata(readsheet));
 
         newProjectMilestones.Clear();
@@ -2884,6 +3042,11 @@
             await JSRuntime.InvokeVoidAsync("eval", "bootstrap.Modal.getInstance(document.getElementById('addProjectModal')).hide()");
             await ShowErrorModal();
             return;
+        }
+        // 根據年份強制校驗 Phase Rule 的值，確保資料一致性
+        if (newProjectYear <= 2025)
+        {
+            newProjectPhaseRule = "N/A";
         }
 
         isSavingNewProject = true;
@@ -2927,16 +3090,18 @@
 
                 try
                 {
+                    // 步驟 3.2: 寫入 ProjectInfo (來源: 703-751)
                     string mergeQuery = @"
                         MERGE INTO ProjectDashboard_A31_HWD_電源部_ProjectInfo AS Target
                         USING (VALUES (@ProjectCode, @Year)) AS Source (ProjectCode, Year)
                         ON Target.ProjectCode = Source.ProjectCode AND Target.Year = Source.Year
                         WHEN MATCHED THEN
                             UPDATE SET Division = @Division, Department = @Department, DMRole = @DMRole,
-                                       DLRole = @DLRole, DERole = @DERole, Schedule = @Schedule, Status = @Status
+                                         DLRole = @DLRole, DERole = @DERole, Schedule = @Schedule, Status = @Status,
+                                         PhaseRule = @PhaseRule
                         WHEN NOT MATCHED THEN
-                            INSERT (ProjectCode, Division, Department, DMRole, DLRole, DERole, Year, Schedule, Status)
-                            VALUES (@ProjectCode, @Division, @Department, @DMRole, @DLRole, @DERole, @Year, @Schedule, @Status);";
+                            INSERT (ProjectCode, Division, Department, DMRole, DLRole, DERole, Year, Schedule, Status, PhaseRule)
+                            VALUES (@ProjectCode, @Division, @Department, @DMRole, @DLRole, @DERole, @Year, @Schedule, @Status, @PhaseRule);";
                     using (SqlCommand cmd = new SqlCommand(mergeQuery, conn, transaction)) // 將 transaction 加入 command
                     {
                         cmd.Parameters.AddWithValue("@ProjectCode", newProjectName.Trim());
@@ -2948,45 +3113,194 @@
                         cmd.Parameters.AddWithValue("@DERole", deRole);
                         cmd.Parameters.AddWithValue("@Schedule", scheduleString);
                         cmd.Parameters.AddWithValue("@Status", "進行中");
+                        cmd.Parameters.AddWithValue("@PhaseRule", newProjectPhaseRule);
                         await cmd.ExecuteNonQueryAsync();
                     }
 
-                    // 步驟 3.5: 將新專案作為一個新的 "欄位" 新增到對應的儀表板資料表中
+                    // 步驟 3.5: 檢查儀表板資料表是否存在，若不存在則建立
                     string dashboardTableName = $"ProjectDashboard_{newProjectDepartment}_{newProjectYear}";
+                    if (newProjectPhaseRule == "3-Phase")
+                    {
+                        dashboardTableName += "_3Phase";
+                    }
+                    else if (newProjectPhaseRule == "2-Phase w/o EVT")
+                    {
+                        dashboardTableName += "_2PhaseWithoutEVT";
+                    }
+                    else if (newProjectPhaseRule == "2-Phase w/o DVT2")
+                    {
+                        dashboardTableName += "_2PhaseWithoutDVT2";
+                    }
                     string newColumnName = newProjectName.Trim();
 
-                    // 查詢該欄位是否已存在
-                    string checkColumnQuery = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @TableName AND COLUMN_NAME = @ColumnName";
-                    using (var checkCmd = new SqlCommand(checkColumnQuery, conn, transaction)) // 將 transaction 加入 command
+                    // 步驟 3.5.1: 檢查 "資料表" 是否存在
+                    string checkTableQuery = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = @TableName";
+                    int tableExists = 0;
+                    using (var checkTableCmd = new SqlCommand(checkTableQuery, conn, transaction))
                     {
-                        checkCmd.Parameters.AddWithValue("@TableName", dashboardTableName);
-                        checkCmd.Parameters.AddWithValue("@ColumnName", newColumnName);
-                        int columnExists = (int)await checkCmd.ExecuteScalarAsync();
+                        checkTableCmd.Parameters.AddWithValue("@TableName", dashboardTableName);
+                        tableExists = (int)await checkTableCmd.ExecuteScalarAsync();
+                    }
 
-                        if (columnExists == 0)
+                    // 步驟 3.5.2: 根據 "資料表" 存在與否，執行不同邏輯
+                    if (tableExists == 0)
+                    {
+                        // 資料表不存在，執行 CREATE TABLE
+                        Debug.WriteLine($"資料表 '{dashboardTableName}' 不存在，開始建立...");
+
+                        // 1. 建立資料表 (包含 ID, Stage, Item, 和第一個專案欄位)
+                        // 欄位屬性參考現有的 ALTER TABLE 邏輯 (NVARCHAR(MAX) NOT NULL DEFAULT '')
+                        string createTableQuery = $@"
+                            CREATE TABLE [{dashboardTableName}] (
+                                [ID] INT IDENTITY(1,1) PRIMARY KEY,
+                                [Stage] NVARCHAR(MAX) NOT NULL DEFAULT '',
+                                [Item] NVARCHAR(MAX) NOT NULL DEFAULT '',
+                                [{newColumnName}] NVARCHAR(MAX) NOT NULL DEFAULT ''
+                            )";
+                        using (var createCmd = new SqlCommand(createTableQuery, conn, transaction))
                         {
-                            // 如果欄位不存在，則執行 ALTER TABLE 來新增欄位
-                            // 設定預設值為空字串('')，滿足 stage-item 內容留空的需求
-                            // 將 NULL 改為 NOT NULL，強制 SQL Server 為所有現有資料列填入 Default 值('')
-                            string alterTableQuery = $"ALTER TABLE [{dashboardTableName}] ADD [{newColumnName}] NVARCHAR(MAX) NOT NULL DEFAULT ''";
-                            using (var alterCmd = new SqlCommand(alterTableQuery, conn, transaction)) // 將 transaction 加入 command
-                            {
-                                await alterCmd.ExecuteNonQueryAsync();
-                                Debug.WriteLine($"已成功在資料表 '{dashboardTableName}' 中新增欄位 '{newColumnName}'。");
-                            }
-
-                            // 接著，立即將這個新欄位的所有儲存格內容更新為 'Non-Ready'
-                            // 增加 WHERE 條件，只更新 Item 欄位不為空值的資料列
-                            string updateQuery = $"UPDATE [{dashboardTableName}] SET [{newColumnName}] = 'Non-Ready' WHERE [Item] IS NOT NULL AND [Item] != ''";
-                            using (var updateCmd = new SqlCommand(updateQuery, conn, transaction))
-                            {
-                                await updateCmd.ExecuteNonQueryAsync();
-                                Debug.WriteLine($"已將新欄位 '{newColumnName}' 的所有儲存格初始值設為 'Non-Ready'。");
-                            }
+                            await createCmd.ExecuteNonQueryAsync();
+                            Debug.WriteLine($"已成功建立資料表 '{dashboardTableName}'。");
                         }
-                        else
+
+                        // 2. 從 SOW 範本複製 Stage 和 Item 資料
+                        // 取得 SOW 範本的部門名稱 (e.g. "PWR1" -> "電源部")
+                        string tableNameDepartment = newProjectDepartment;
+                        if (newProjectDepartment == "PWR1" || newProjectDepartment == "PWR2")
                         {
-                            Debug.WriteLine($"欄位 '{newColumnName}' 已存在於資料表 '{dashboardTableName}' 中，無需新增。");
+                            tableNameDepartment = "電源部";
+                        }
+                        else if (newProjectDepartment == "HW1" || newProjectDepartment == "HW2" || newProjectDepartment == "HW3" || newProjectDepartment == "HW4")
+                        {
+                            tableNameDepartment = "硬體部";
+                        }
+
+                        // 組合 SOW 範本表名稱
+                        string sowTemplateName = $"ProjectDashboard_A31_HWD_{tableNameDepartment}_SOW_{newProjectYear}";
+                        if (newProjectPhaseRule == "3-Phase")
+                        {
+                            sowTemplateName += "_3Phase";
+                        }
+                        else if (newProjectPhaseRule == "2-Phase w/o EVT")
+                        {
+                            sowTemplateName += "_2PhaseWithoutEVT";
+                        }
+                        else if (newProjectPhaseRule == "2-Phase w/o DVT2")
+                        {
+                            sowTemplateName += "_2PhaseWithoutDVT2";
+                        }
+                        
+
+                        // 改用 C# 逐行讀取 SOW 範本，以便動態插入 Stage 標題列
+
+                        // 1. 建立一個 List 來暫存 SOW 範本資料
+                        var sowItems = new List<(string Stage, string Item)>();
+                        // 查詢 SOW 範本，必須加上 ORDER BY [ID] 才能確保 Stage 暫存器邏輯正確
+                        string readSowQuery = $"SELECT [Stage], [Item] FROM [{sowTemplateName}] ORDER BY [ID]";
+                        string insertDashboardQuery = $"INSERT INTO [{dashboardTableName}] ([Stage], [Item]) VALUES (@Stage, @Item)";
+
+                        try
+                        {
+                            // 2. 執行讀取 (Read) 操作，將資料存入 List
+                            // (此 command 必須使用 transaction)
+                            using (var readCmd = new SqlCommand(readSowQuery, conn, transaction))
+                            {
+                                // 讀取器 (Reader) 在此 using 區塊結束後會自動關閉
+                                using (var reader = await readCmd.ExecuteReaderAsync())
+                                {
+                                    while (await reader.ReadAsync())
+                                    {
+                                        sowItems.Add((
+                                            reader["Stage"]?.ToString() ?? "",
+                                            reader["Item"]?.ToString() ?? ""
+                                        ));
+                                    }
+                                }
+                            } // Reader 在此處關閉，釋放 transaction 給後續的 Insert 使用
+
+                            // 3. 準備寫入 (Insert) 操作
+                            string? lastStage = null; // 這就是您提到的 "Stage 暫存器"
+                            int rowsInserted = 0;
+
+                            // (此 command 必須使用同一個 transaction)
+                            using (var insertCmd = new SqlCommand(insertDashboardQuery, conn, transaction))
+                            {
+                                // 定義參數
+                                var stageParam = insertCmd.Parameters.Add("@Stage", System.Data.SqlDbType.NVarChar);
+                                var itemParam = insertCmd.Parameters.Add("@Item", System.Data.SqlDbType.NVarChar);
+
+                                // 4. 遍歷記憶體中的 List 並執行插入
+                                foreach (var (currentStage, currentItem) in sowItems)
+                                {
+                                    // 檢查 Stage 是否變更
+                                    if (currentStage != lastStage)
+                                    {
+                                        // 如果變更了，先插入一筆 Stage 標題列 (Item 為空字串)
+                                        stageParam.Value = (object)currentStage ?? DBNull.Value;
+                                        itemParam.Value = (object)string.Empty ?? DBNull.Value; // 標題列
+                                        await insertCmd.ExecuteNonQueryAsync();
+                                        rowsInserted++;
+                                        lastStage = currentStage; // 更新暫存器
+                                    }
+
+                                    // 接著插入 SOW 範本中的實際資料列
+                                    stageParam.Value = (object)currentStage ?? DBNull.Value;
+                                    itemParam.Value = (object)currentItem ?? DBNull.Value;
+                                    await insertCmd.ExecuteNonQueryAsync();
+                                    rowsInserted++;
+                                }
+                            }
+
+                            Debug.WriteLine($"已從 SOW 範本 '{sowTemplateName}' 讀取並動態插入 {rowsInserted} 筆資料 (含標題列) 至 '{dashboardTableName}'。");
+                        }
+                        catch (SqlException ex)
+                        {
+
+                            Debug.WriteLine($"從 SOW 範本複製資料時失敗: {ex.Message}。請檢查範本表 '{sowTemplateName}' 是否存在且包含 [Stage] 和 [Item] 欄位。");
+                            // 拋出更明確的錯誤，觸發交易回復
+                            throw new InvalidOperationException($"無法從 SOW 範本 '{sowTemplateName}' 填入資料。請檢查該範本是否存在。", ex);
+                        }
+
+                        // 3. 將新專案欄位的值初始化為 'Non-Ready'
+                        string updateQuery = $"UPDATE [{dashboardTableName}] SET [{newColumnName}] = 'Non-Ready' WHERE [Item] IS NOT NULL AND [Item] != ''";
+                        using (var updateCmd = new SqlCommand(updateQuery, conn, transaction))
+                        {
+                            await updateCmd.ExecuteNonQueryAsync();
+                            Debug.WriteLine($"已將新欄位 '{newColumnName}' 的所有儲存格初始值設為 'Non-Ready'。");
+                        }
+                    }
+                    else
+                    {
+                        // 資料表已存在，執行 "原有的" 檢查 "欄位" 邏輯
+                        string checkColumnQuery = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @TableName AND COLUMN_NAME = @ColumnName";
+                        using (var checkCmd = new SqlCommand(checkColumnQuery, conn, transaction)) // 將 transaction 加入 command
+                        {
+                            checkCmd.Parameters.AddWithValue("@TableName", dashboardTableName);
+                            checkCmd.Parameters.AddWithValue("@ColumnName", newColumnName);
+                            int columnExists = (int)await checkCmd.ExecuteScalarAsync();
+
+                            if (columnExists == 0)
+                            {
+                                // 如果欄位不存在，則執行 ALTER TABLE 來新增欄位
+                                string alterTableQuery = $"ALTER TABLE [{dashboardTableName}] ADD [{newColumnName}] NVARCHAR(MAX) NOT NULL DEFAULT ''";
+                                using (var alterCmd = new SqlCommand(alterTableQuery, conn, transaction)) // 將 transaction 加入 command
+                                {
+                                    await alterCmd.ExecuteNonQueryAsync();
+                                    Debug.WriteLine($"已成功在資料表 '{dashboardTableName}' 中新增欄位 '{newColumnName}'。");
+                                }
+
+                                // 接著，立即將這個新欄位的所有儲存格內容更新為 'Non-Ready'
+                                string updateQuery = $"UPDATE [{dashboardTableName}] SET [{newColumnName}] = 'Non-Ready' WHERE [Item] IS NOT NULL AND [Item] != ''";
+                                using (var updateCmd = new SqlCommand(updateQuery, conn, transaction))
+                                {
+                                    await updateCmd.ExecuteNonQueryAsync();
+                                    Debug.WriteLine($"已將新欄位 '{newColumnName}' 的所有儲存格初始值設為 'Non-Ready'。");
+                                }
+                            }
+                            else
+                            {
+                                Debug.WriteLine($"欄位 '{newColumnName}' 已存在於資料表 '{dashboardTableName}' 中，無需新增。");
+                            }
                         }
                     }
 
@@ -2996,9 +3310,8 @@
                 catch (Exception ex)
                 {
                     // 如果有任何錯誤，回滾 transaction
-                    transaction.Rollback();
-                    // 重新拋出異常，讓外層的 try-catch 捕捉並顯示錯誤訊息
-                    throw new Exception("在資料庫同步新專案時發生錯誤。", ex);
+                    transaction.Rollback(); 
+                    throw; 
                 }
             }
 

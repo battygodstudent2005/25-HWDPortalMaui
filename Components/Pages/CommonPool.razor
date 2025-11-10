@@ -1,0 +1,709 @@
+﻿@page "/CommonPool"
+@using HWDPortalMaui.Services
+@using Microsoft.Extensions.Logging
+@using System.Data @* 為了使用 DataTable *@
+@inject UserInfoService _userInfoService
+@inject CommonPoolService _commonPoolService
+
+
+@* 篩選條件區塊 (結構同 Document.razor) *@
+<div class="row mb-3 g-2">
+    <div class="col-lg-12">
+        <div class="card shadow-sm h-100">
+            @* 使用 .py-2 樣式讓標題更緊湊 *@
+            <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                <span>
+                    <i class="bi bi-funnel-fill me-2"></i>篩選條件
+                </span>
+            </div>
+            <div class="card-body py-2">
+                @* 搜尋欄位結構 *@
+                <div class="row mb-3 align-items-center">
+                    @* 搜尋框改為 8 欄寬 *@
+                    <div class="col-md-8">
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-search"></i></span>
+                            <input type="text" class="form-control" placeholder="依 Compal P/N / Compal Description 搜尋..."
+                                   @bind="SearchTerm" @bind:event="oninput" />
+                            @if (!string.IsNullOrWhiteSpace(SearchTerm))
+                            {
+                                <button class="btn btn-outline-secondary" @onclick="ClearSearch">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            }
+                        </div>
+                    </div>
+
+                    @* 管理按鈕區塊 *@
+                    <div class="col-md-4">
+                        <div class="d-flex justify-content-end align-items-center">
+                            @if (IsAdmin)
+                            {
+                                <button class="btn btn-primary btn-sm" @onclick="OpenManageModal">管理</button>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                @* 下拉式選單 (使用 .form-label small 樣式) *@
+                <div class="row g-2">
+                    @* Component Type 選擇 *@
+                    <div class="col-md-3">
+                        <label for="component-type-select" class="form-label mb-1 small">Component Type：</label>
+                        <select id="component-type-select" class="form-select form-select-sm" @bind="SelectedComponentType">
+                            @if (ComponentTypeList.Any())
+                            {
+                                @foreach (var item in ComponentTypeList)
+                                {
+                                    <option value="@item">@item</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                    @* Manufacturer 選擇 *@
+                    <div class="col-md-3">
+                        <label for="manufacturer-select" class="form-label mb-1 small">Manufacturer：</label>
+                        <select id="manufacturer-select" class="form-select form-select-sm" @bind="SelectedManufacturer">
+                            @if (ManufacturerList.Any())
+                            {
+                                @foreach (var item in ManufacturerList)
+                                {
+                                    <option value="@item">@item</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                    @* Application 選擇 *@
+                    <div class="col-md-3">
+                        <label for="application-select" class="form-label mb-1 small">Application：</label>
+                        <select id="application-select" class="form-select form-select-sm" @bind="SelectedApplication">
+                            @if (ApplicationList.Any())
+                            {
+                                @foreach (var item in ApplicationList)
+                                {
+                                    <option value="@item">@item</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* 主要內容顯示區塊 *@
+
+@* 資料顯示表格區塊 (邏輯更新) *@
+<div class="row">
+    <div class="col-lg-12">
+        <div class="card shadow-sm">
+            <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                <span>
+                    @* 圖示和標題文字 *@
+                    <i class="bi bi-card-list me-2"></i>
+                    替代料資訊
+                </span>
+                @* 仿照 SecondSource.razor 新增右側計數顯示 *@
+                <small class="text-muted">
+                    顯示 @(filteredItems?.Rows.Count ?? 0) / @(allSecondSourceItems?.Rows.Count ?? 0) 筆資料
+                </small>
+            </div>
+            @* card-body 增加最小高度並處理載入狀態 *@
+            <div class="card-body" style="min-height: 250px;">
+                @if (isLoading)
+                {
+                    @* 載入中的轉圈動畫 *@
+                    <div class="d-flex justify-content-center align-items-center h-100 mt-5">
+                        <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <span class="ms-3 fs-5">資料載入中...</span>
+                    </div>
+                }
+                else if (filteredItems == null || filteredItems.Rows.Count == 0)
+ @* *@
+                {
+                    @* 查無資料的提示 *@
+                    <div class="d-flex flex-column justify-content-center align-items-center text-muted h-100 mt-5">
+                        <i class="bi bi-info-circle" style="font-size: 2.5rem;"></i>
+                        <p class="mt-2 fs-5">
+                            @if (!string.IsNullOrWhiteSpace(SearchTerm))
+                            {
+                                <span>查無符合 "<strong>@SearchTerm</strong>" 的資料。</span>
+                            }
+                            else
+                            {
+                                <span>目前 "<strong>@SelectedComponentType</strong>" 類別下尚無資料。</span>
+                            }
+                        </p>
+                    </div>
+                }
+                else
+                {
+                    @* 動態產生表格 *@
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle table-bordered-vertical">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    @if (filteredItems.Columns.Count > 0)
+
+                                    {
+                                        @foreach (DataColumn col in filteredItems.Columns)
+                                        {
+
+
+                                            @if (col.ColumnName != "ID" && col.ColumnName != "GroupID") // 隱藏 ID 和 GroupID 欄位
+                                            {
+                                                @* 標頭(thead)應該只顯示欄位名稱 *@
+                                                <th>
+
+                                                    @col.ColumnName
+                                                </th>
+
+                                            }
+                                        }
+                                    }
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @* 動態讀取儲存格內容，並加入 UI/UX 優化 *@
+                                @foreach (DataRow row in filteredItems.Rows)
+                                {
+                                    // 檢查 Source 欄位，並使用 Trim() 排除空格造成的匹配失敗
+                                    bool isMainItem = row.Table.Columns.Contains("Source") &&
+                                    row["Source"]?.ToString().Trim() == "Main";
+
+                                    // 根據是否為 Main Item 設定 CSS Class。
+                                    // 改用 'table-info' (淺青色)，這個 class 在表格中的優先級通常高於 'bg-primary-subtle'
+
+                                    string rowClass = isMainItem ? "table-info text-dark" : "";
+                                    <tr class="@rowClass">
+                                        @* 套用 rowClass *@
+                                        @foreach (DataColumn col in filteredItems.Columns)
+                                        {
+                                            @if (col.ColumnName != "ID" && col.ColumnName != "GroupID") // 隱藏 ID 和 GroupID 欄位
+                                            {
+                                                // @if (col.ColumnName != "ID" && col.ColumnName != "GroupID") // 隱藏 ID 和 GroupID 欄位儲存格樣式邏輯 (UI/UX 優化)
+                                                string cellClass = "";
+
+                                                // 1. 如果是 Main Item，關鍵欄位 (P/N, Description) 加粗
+                                                if (isMainItem && (col.ColumnName == "Compal P/N" || col.ColumnName == "Compal Description"))
+                                                {
+                                                    cellClass += " fw-bold";
+                                                }
+
+                                                // 2. 根據欄位名稱猜測並調整對齊
+                                                // (例如：數量、庫存、價格 靠右對齊)
+                                                if (col.ColumnName.EndsWith(" Qty") || col.ColumnName.EndsWith(" Stock") || col.ColumnName.Contains("Price"))
+                                                {
+                                                    cellClass += " text-end"; // 靠右
+                                                }
+                                                // (例如：狀態、類型 置中對齊)
+                                                else if (col.ColumnName == "Status" || col.ColumnName == "Type")
+                                                {
+                                                    cellClass += " text-center"; // 置中
+                                                }
+
+                                                @* 套用 cellClass *@
+                                                <td class="@cellClass.Trim()">
+                                                    @* 高亮顯示的邏輯應該放在 tbody (表格主體) *@
+                                                    @HighlightMatches(col.ColumnName, row[col])
+                                                </td>
+                                            }
+                                        }
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+
+@* 管理介面的 Modal *@
+@if (showManageModal)
+{
+    <div class="modal fade show" tabindex="-1" style="display: block;" role="dialog">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">替代料管理</h5>
+                    <button type="button" class="btn-close" @onclick="CloseManageModal"></button>
+                </div>
+                <div class="modal-body">
+                    @* 管理介面的內容將會放在這裡 *@
+                    <p>管理介面內容待新增。</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseManageModal">關閉</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@code {
+    [CascadingParameter]
+    public MainLayout? Layout { get; set; }
+
+    // Modal 相關狀態
+    private bool showManageModal = false;
+    // 定義一個唯讀的管理員清單 (同 Document.razor)
+    private readonly HashSet<string> AdminList = new() { "Chain_Liu", "Morris_Wu", "Toby_Lin" };
+    // 新增一個布林屬性，用來判斷目前使用者是否在 AdminList 中
+    private bool IsAdmin => _userInfoService != null && !string.IsNullOrEmpty(_userInfoService.UserName) && AdminList.Contains(_userInfoService.UserName);
+    // Modal 的控制方法
+    private void OpenManageModal() => showManageModal = true;
+    private void CloseManageModal() => showManageModal = false;
+
+    // 載入狀態
+    private bool isLoading = true;
+
+    // 資料列表改用 DataTable
+    private DataTable? allSecondSourceItems;
+    private DataTable? filteredItems;
+
+    // 篩選條件列表
+    private List<string> ComponentTypeList { get; set; } = new() { "Choke", "Control_IC_and_Converter", "Diode", "Dr_MOS_and_MOSFET", "IC", "LDO_OP_Load_Switch", "Leading_Indicators", "MLCC", "POS_CAP", "Resistor", "Small_Signal_MOSFET" };
+    // Application 篩選列表 (動態產生)
+    private List<string> ApplicationList { get; set; } = new() { "All" };
+    // Manufacturer 篩選列表 (動態產生)
+    private List<string> ManufacturerList { get; set; } = new() { "All" };
+
+    // 搜尋關鍵字 (參考 Document.razor)
+    private string _searchTerm = "";
+    private string SearchTerm
+    {
+        get => _searchTerm;
+        set
+        {
+            if (_searchTerm != value)
+            {
+                _searchTerm = value;
+                FilterData(); // 當 SearchTerm 被賦值時，自動呼叫篩選方法
+            }
+        }
+    }
+
+    // SelectedComponentType 屬性
+    private string _selectedComponentType = "Choke";
+    private string SelectedComponentType
+    {
+        get => _selectedComponentType;
+        set
+        {
+            if (_selectedComponentType != value)
+            {
+                _selectedComponentType = value;
+                // 改為呼叫 LoadDataAsync 重新從資料庫讀取資料
+                Task.Run(async () => await LoadDataAsync()); 
+            }
+        }
+    }
+    // SelectedApplication 屬性
+    private string _selectedApplication = "All"; // 預設選取 "All"
+    private string SelectedApplication
+    {
+        get => _selectedApplication;
+        set
+        {
+            if (_selectedApplication != value)
+            {
+                _selectedApplication = value;
+                FilterData(); // 變更時，觸發篩選
+            }
+        }
+    }
+    // SelectedManufacturer 屬性
+    private string _selectedManufacturer = "All"; // 預設選取 "All"
+    private string SelectedManufacturer
+    {
+        get => _selectedManufacturer;
+        set
+        {
+            if (_selectedManufacturer != value)
+            {
+                _selectedManufacturer = value;
+                FilterData(); // 變更時，觸發篩選
+            }
+        }
+    }
+
+    // OnInitializedAsync 保持不變 (僅載入資料)
+    protected override async Task OnInitializedAsync()
+    {
+        Layout?.SetPageTitle("替代料 (Common Pool)");
+        await LoadDataAsync();
+    }
+
+    // 清除搜尋條件的方法 (參考 Document.razor)
+    private void ClearSearch()
+    {
+        SearchTerm = "";
+    }
+
+    // LoadDataAsync (現在會根據 SelectedComponentType 載入資料)
+    private async Task LoadDataAsync()
+    {
+        isLoading = true;
+        // Task.Run 呼叫時可能不在 UI 執行緒，使用 InvokeAsync 確保 UI 更新
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            // 根據 SelectedComponentType 從 CommonPoolService 取得資料 (DataTable)
+            allSecondSourceItems = await _commonPoolService.GetCommonPoolItemsAsync(SelectedComponentType);
+            
+            if (allSecondSourceItems != null && allSecondSourceItems.Rows.Count > 0 && allSecondSourceItems.Columns.Contains("ID"))
+            {
+                try
+                {
+                    
+                    DataRow[] sortedRows = allSecondSourceItems.Select("", "ID ASC");
+                    
+                    allSecondSourceItems = sortedRows.CopyToDataTable();
+                }
+                catch (Exception ex)
+                {
+                    
+                    // (如果排序失敗，例如 ID 欄位資料型態問題，至少保留原始資料)
+                }
+            }
+            AddGroupIdentifier(allSecondSourceItems);
+            UpdateApplicationList(); // 載入資料後，更新 Application 列表
+            UpdateManufacturerList(); // 載入資料後，更新 Manufacturer 列表
+            // 執行初始篩選 (主要針對 SearchTerm)
+            FilterData();
+        }
+        catch (Exception ex)
+        {
+            // (Log 應在 Service 層處理)
+            // 清空列表
+            allSecondSourceItems = new DataTable();
+            filteredItems = new DataTable();
+            UpdateApplicationList(); // 發生錯誤時，清空 Application 列表 (保留 "All")
+            UpdateManufacturerList(); // 發生錯誤時，清空 Manufacturer 列表 (保留 "All")
+        }
+        finally
+        {
+            isLoading = false;
+            // 確保 UI 更新
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+    // AddGroupIdentifier 輔助方法
+    private void AddGroupIdentifier(DataTable? dt)
+    {
+        if (dt == null || dt.Rows.Count == 0 || !dt.Columns.Contains("Source") || !dt.Columns.Contains("ID"))
+        {
+            return;
+        }
+
+        if (dt.Columns.Contains("GroupID"))
+        {
+            return; 
+        }
+
+        
+        dt.Columns.Add("GroupID", typeof(object));
+
+        
+        object? currentGroupID = null;
+        DataColumn sourceCol = dt.Columns["Source"]!;
+        DataColumn idCol = dt.Columns["ID"]!;
+        DataColumn groupIDCol = dt.Columns["GroupID"]!;
+
+        
+        foreach (DataRow row in dt.Rows)
+        {
+            string? source = row[sourceCol]?.ToString();
+
+            
+            if (source == "Main")
+            {
+                currentGroupID = row[idCol]; 
+            }
+
+            
+            row[groupIDCol] = currentGroupID ?? DBNull.Value;
+        }
+    }
+
+    // 執行篩選的核心方法 (處理 DataTable)
+    private void FilterData()
+    {
+        if (allSecondSourceItems == null || allSecondSourceItems.Rows.Count == 0)
+        {
+            filteredItems = allSecondSourceItems ?? new DataTable();
+            return;
+        }
+
+        IEnumerable<DataRow> query = allSecondSourceItems.AsEnumerable();
+
+        // 檢查 GroupID 欄位是否存在 (由 AddGroupIdentifier 方法新增)
+        bool hasGrouping = allSecondSourceItems.Columns.Contains("GroupID");
+
+        if (hasGrouping)
+        {
+            // *** 執行群組感知篩選 (Group-Aware Filtering) ***
+            // 邏{_memo:R-AW-C-1_}輯：先找出符合條件的「群組」，再顯示這些群組的「所有」成員
+
+            // 1. 依據 SearchTerm (關鍵字) 進行群組篩選
+            if (!string.IsNullOrWhiteSpace(SearchTerm))
+            {
+                bool hasCompalPN = allSecondSourceItems.Columns.Contains("Compal P/N");
+                bool hasCompalDesc = allSecondSourceItems.Columns.Contains("Compal Description");
+
+                // 找出所有符合關鍵字條件的「群組 ID」 (GroupID)
+                var matchingGroupIDs = new HashSet<object>(
+                    query.Where(row =>
+                    {
+                        var compalPN = hasCompalPN ? row["Compal P/N"]?.ToString() : null;
+                        var compalDesc = hasCompalDesc ? row["Compal Description"]?.ToString() : null;
+                        // 篩選 Compal P/N 或 Compal Description
+                        return (compalPN != null && compalPN.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)) ||
+                               (compalDesc != null && compalDesc.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase));
+                    })
+                    .Select(row => row["GroupID"]) // 取得這些列的 GroupID
+                    .Where(gid => gid != null && gid != DBNull.Value)
+                );
+
+                // 將 query 更新為：只包含那些 GroupID 在 matchingGroupIDs 列表中的資料列
+                query = query.Where(row => matchingGroupIDs.Contains(row["GroupID"]));
+            }
+
+            // 2. 依據 SelectedApplication 進行群組篩選 (在上述篩選結果上)
+            if (_selectedApplication != "All" && allSecondSourceItems.Columns.Contains("Application"))
+            {
+                // 找出 (目前 query 中) 符合 Application 條件的「群組 ID」
+                var matchingGroupIDs = new HashSet<object>(
+                    query.Where(row =>
+                    {
+                        var app = row["Application"]?.ToString();
+                        return !string.IsNullOrEmpty(app) && app.Equals(_selectedApplication, StringComparison.OrdinalIgnoreCase);
+                    })
+                    .Select(row => row["GroupID"]) // 取得這些列的 GroupID
+                    .Where(gid => gid != null && gid != DBNull.Value)
+                );
+
+                // 將 query 更新為：只包含那些 GroupID 在 matchingGroupIDs 列表中的資料列
+                query = query.Where(row => matchingGroupIDs.Contains(row["GroupID"]));
+            }
+
+            // 3. 依據 SelectedManufacturer 進行群組篩選 (在上述篩選結果上)
+            if (_selectedManufacturer != "All" && allSecondSourceItems.Columns.Contains("Manufacturer"))
+            {
+                // 找出 (目前 query 中) 符合 Manufacturer 條件的「群組 ID」
+                var matchingGroupIDs = new HashSet<object>(
+                    query.Where(row =>
+                    {
+                        var mfg = row["Manufacturer"]?.ToString();
+                        return !string.IsNullOrEmpty(mfg) && mfg.Equals(_selectedManufacturer, StringComparison.OrdinalIgnoreCase);
+                    })
+                    .Select(row => row["GroupID"]) // 取得這些列的 GroupID
+                    .Where(gid => gid != null && gid != DBNull.Value)
+                );
+
+                // 將 query 更新為：只包含那些 GroupID 在 matchingGroupIDs 列表中的資料列
+                query = query.Where(row => matchingGroupIDs.Contains(row["GroupID"]));
+            }
+        }
+        else
+        {
+            // *** 執行逐列篩選 (Row-by-Row Filtering) (備援機制) ***
+            // (如果 AddGroupIdentifier 因故失敗，則退回舊的逐列篩選)
+
+            // 備援：1. 依據 SearchTerm 逐列篩選
+            if (!string.IsNullOrWhiteSpace(SearchTerm))
+            {
+                bool hasCompalPN = allSecondSourceItems.Columns.Contains("Compal P/N");
+                bool hasCompalDesc = allSecondSourceItems.Columns.Contains("Compal Description");
+
+                query = query.Where(row =>
+                {
+                    var compalPN = hasCompalPN ? row["Compal P/N"]?.ToString() : null;
+                    var compalDesc = hasCompalDesc ? row["Compal Description"]?.ToString() : null;
+                    return (compalPN != null && compalPN.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)) ||
+                           (compalDesc != null && compalDesc.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase));
+                });
+            }
+
+            // 備援：2. 依據 SelectedApplication 逐列篩選
+            if (_selectedApplication != "All" && allSecondSourceItems.Columns.Contains("Application"))
+            {
+                query = query.Where(row =>
+                {
+                    var app = row["Application"]?.ToString();
+                    if (string.IsNullOrEmpty(app)) return false;
+                    return app.Equals(_selectedApplication, StringComparison.OrdinalIgnoreCase);
+                });
+            }
+
+            // 備援：3. 依據 SelectedManufacturer 逐列篩選
+            if (_selectedManufacturer != "All" && allSecondSourceItems.Columns.Contains("Manufacturer"))
+            {
+                query = query.Where(row =>
+                {
+                    var mfg = row["Manufacturer"]?.ToString();
+                    if (string.IsNullOrEmpty(mfg)) return false;
+                    return mfg.Equals(_selectedManufacturer, StringComparison.OrdinalIgnoreCase);
+                });
+            }
+        }
+
+        // 將 IEnumerable<DataRow> 轉回 DataTable
+        if (query.Any())
+        {
+            // 排序 (Service 查詢時已 ORDER BY ID DESC, 在此強制改為 ID 升序)
+            filteredItems = query.OrderBy(row => row["ID"]).CopyToDataTable();
+        }
+        else
+        {
+            // 如果篩選後沒有結果，建立一個空結構 (包含欄位)
+            filteredItems = allSecondSourceItems.Clone();
+        }
+    }
+    // 更新 Application 下拉選單的內容
+    private void UpdateApplicationList()
+    {
+        // 總是重設列表並保留 "All"
+        ApplicationList.Clear();
+        ApplicationList.Add("All");
+
+        // 檢查 allSecondSourceItems 是否有資料且包含 "Application" 欄位
+        if (allSecondSourceItems != null &&
+            allSecondSourceItems.Rows.Count > 0 &&
+            allSecondSourceItems.Columns.Contains("Application"))
+        {
+            try
+            {
+                // 從 allSecondSourceItems (完整資料) 中提取唯一的 Application 值
+                var apps = allSecondSourceItems.AsEnumerable()
+                    .Select(row => row["Application"]?.ToString()) // 取得 Application 欄位值
+                    .Where(app => !string.IsNullOrEmpty(app))     // 過濾掉空值
+                    .Distinct(StringComparer.OrdinalIgnoreCase) // 忽略大小寫並取得唯一值
+                    .OrderBy(app => app);                         // 排序
+
+                ApplicationList.AddRange(apps);
+            }
+            catch (Exception)
+            {
+                // 處理例外 (例如 "Application" 欄位不存在，雖然前面已檢查)
+                // 保持 ApplicationList 只有 "All"
+            }
+        }
+
+        // 檢查目前的 SelectedApplication 是否還存在於新列表中
+        if (!ApplicationList.Contains(_selectedApplication))
+        {
+            _selectedApplication = "All"; // 如果不存在 (例如換了 Component Type)，則重設為 "All"
+        }
+    }
+    // 更新 Manufacturer 下拉選單的內容
+    private void UpdateManufacturerList()
+    {
+        // 總是重設列表並保留 "All"
+        ManufacturerList.Clear();
+        ManufacturerList.Add("All");
+
+        // 檢查 allSecondSourceItems 是否有資料且包含 "Manufacturer" 欄位
+        if (allSecondSourceItems != null &&
+            allSecondSourceItems.Rows.Count > 0 &&
+            allSecondSourceItems.Columns.Contains("Manufacturer"))
+        {
+            try
+            {
+                // 從 allSecondSourceItems (完整資料) 中提取唯一的 Manufacturer 值
+                var mfg = allSecondSourceItems.AsEnumerable()
+                    .Select(row => row["Manufacturer"]?.ToString()) // 取得 Manufacturer 欄位值
+                    .Where(m => !string.IsNullOrEmpty(m))     // 過濾掉空值
+                    .Distinct(StringComparer.OrdinalIgnoreCase) // 忽略大小寫並取得唯一值
+                    .OrderBy(m => m);                         // 排序
+
+                ManufacturerList.AddRange(mfg);
+            }
+            catch (Exception)
+            {
+                // 處理例外 (例如 "Manufacturer" 欄位不存在，雖然前面已檢查)
+                // 保持 ManufacturerList 只有 "All"
+            }
+        }
+
+        // 檢查目前的 SelectedManufacturer 是否還存在於新列表中
+        if (!ManufacturerList.Contains(_selectedManufacturer))
+        {
+            _selectedManufacturer = "All"; // 如果不存在 (例如換了 Component Type)，則重設為 "All"
+        }
+    }
+    // 用於高亮顯示搜尋關鍵字的輔助方法
+    private MarkupString HighlightMatches(string columnName, object cellValue)
+    {
+        // 取得儲存格的文字內容，並確保 null 轉換為空字串
+        string cellText = cellValue?.ToString() ?? "";
+
+        // CSS class 改為淺黃色 (Bootstrap 5.1+)
+        // (原為 "bg-success bg-opacity-25 text-dark")
+        string cssClass = "bg-warning bg-opacity-50 text-dark";
+
+        // 如果 1. 搜尋關鍵字為空
+        // 或 2. 目前欄位不是 "Compal P/N" 且不是 "Compal Description"
+        if (string.IsNullOrWhiteSpace(SearchTerm) ||
+            (columnName != "Compal P/N" && columnName != "Compal Description"))
+        {
+            // 則回傳原始文字 (經過 HTML 編碼以防 XSS)
+            return new MarkupString(System.Net.WebUtility.HtmlEncode(cellText));
+        }
+
+        try
+        {
+            // 使用 StringBuilder 來高效組合 HTML 字串
+            var sb = new System.Text.StringBuilder();
+            // 追蹤上次匹配結束的位置
+            int lastIndex = 0;
+
+            // 找出第一個匹配關鍵字的位置 (忽略大小寫)
+            int index = cellText.IndexOf(SearchTerm, 0, StringComparison.OrdinalIgnoreCase);
+
+            // 如果 (index == -1) 表示完全沒有匹配
+            if (index == -1)
+            {
+                // 回傳原始編碼文字
+                return new MarkupString(System.Net.WebUtility.HtmlEncode(cellText));
+            }
+
+            // 迴圈處理：只要還能找到匹配 (index != -1)
+            while (index != -1)
+            {
+                // 1. 附加 (上次匹配結束) 到 (目前匹配開始) 之間的「非匹配」文字
+                sb.Append(System.Net.WebUtility.HtmlEncode(cellText.Substring(lastIndex, index - lastIndex)));
+
+                // 2. 附加「匹配」的文字，並用 <span class="..."> 包裹
+                sb.Append($"<span class=\"{cssClass}\">");
+                sb.Append(System.Net.WebUtility.HtmlEncode(cellText.Substring(index, SearchTerm.Length)));
+                sb.Append("</span>");
+
+                // 3. 更新 lastIndex 到目前匹配結束的位置
+                lastIndex = index + SearchTerm.Length;
+
+                // 4. 從 lastIndex 之後，繼續尋找下一個匹配
+                index = cellText.IndexOf(SearchTerm, lastIndex, StringComparison.OrdinalIgnoreCase);
+            }
+
+            // 附加迴圈結束後，最後剩餘的「非匹配」文字
+            sb.Append(System.Net.WebUtility.HtmlEncode(cellText.Substring(lastIndex)));
+
+            // 回傳組合好的 MarkupString (Blazor 會將其渲染為 HTML)
+            return new MarkupString(sb.ToString());
+        }
+        catch (Exception)
+        {
+            // 如果高亮處理過程發生例外 (例如 Substring 索引錯誤)
+            // 則安全退回(Fallback)，僅顯示原始編碼文字
+            return new MarkupString(System.Net.WebUtility.HtmlEncode(cellText));
+        }
+    }
+}
