@@ -74,6 +74,10 @@
                     <button class="btn btn-info btn-sm" @onclick="OpenAddProjectModal" disabled="@(!(_userInfoService.UserRole == "DM" || _userInfoService.UserRole == "FM"))" title="@((_userInfoService.UserRole == "DM" || _userInfoService.UserRole == "FM") ? "新增專案" : "您的權限不足，無法新增專案")">
                         <i class="bi bi-plus-circle me-1"></i>新增專案資訊
                     </button>
+                    @* 開啟專案Template按鈕 *@
+                    <button class="btn btn-secondary btn-sm" @onclick="OpenProjectTemplateFolder">
+                        <i class="bi bi-folder me-1"></i>開啟專案Template
+                    </button>
 
                     @* 只有管理員才看得到的發送狀態按鈕 *@
                     @if (IsAdmin)
@@ -2230,7 +2234,35 @@
             await JSRuntime.InvokeVoidAsync("showToast", $"開啟資料夾失敗: {ex.Message}", "danger");
         }
     }
-
+    // 開啟專案SOW Template資料夾
+    private async Task OpenProjectTemplateFolder()
+    {
+        string templatePath = @"\\tpea31hwdfs01\專案執行\Common Folder\Common\A31 DC-DC SOW documents_template";
+        try
+        {
+            // 對於Template資料夾，我們檢查它是否存在，若不存在應提示錯誤
+            if (Directory.Exists(templatePath))
+            {
+                // 使用 Process.Start 呼叫檔案總管開啟指定的路徑
+                // 這功能僅適用於 MAUI Blazor 等桌面應用程式環境
+                Process.Start("explorer.exe", templatePath);
+                // 透過 JS Interop 顯示成功通知
+                await JSRuntime.InvokeVoidAsync("showToast", "Template資料夾已成功開啟。", "success");
+            }
+            else
+            {
+                // 資料夾不存在的提示
+                Debug.WriteLine($"Template資料夾不存在: {templatePath}");
+                await JSRuntime.InvokeVoidAsync("showToast", $"開啟失敗：Template資料夾路徑不存在。", "warning");
+            }
+        }
+        catch (Exception ex)
+        {
+            // 如果發生錯誤 (例如，路徑無效、權限不足)，則記錄錯誤並通知使用者
+            Debug.WriteLine($"開啟Template資料夾失敗: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("showToast", $"開啟Template資料夾失敗: {ex.Message}", "danger");
+        }
+    }
 
     // 處理儲存格點擊事件
     private void SelectCell(DataRow row, DataColumn column)
