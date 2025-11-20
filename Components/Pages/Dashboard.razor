@@ -1271,7 +1271,7 @@
             "HW4" => @"\\tpea31hwdfs01\專案執行\HW4\0.SOW",
             "PWR1" => @"\\tpea31hwdfs01\專案執行\PWR1\01.Projects",
             "PWR2" => @"\\tpea31hwdfs01\專案執行\PWR2\0.SOW",
-            "PWR2_A32" => @"\\tpea31hwdfs01\專案執行\PWR2\0.SOW",
+            "PWR2_A32" => @"\\tpea31hwdfs01\專案執行\PWR2_A32\0.SOW",
             _ => ""
         };
 
@@ -1307,7 +1307,7 @@
             "HW4" => @"\\tpea31hwdfs01\專案執行\HW4\0.SOW",
             "PWR1" => @"\\tpea31hwdfs01\專案執行\PWR1\01.Projects",
             "PWR2" => @"\\tpea31hwdfs01\專案執行\PWR2\0.SOW",
-            "PWR2_A32" => @"\\tpea31hwdfs01\專案執行\PWR2\0.SOW",
+            "PWR2_A32" => @"\\tpea31hwdfs01\專案執行\PWR2_A32\0.SOW",
             _ => ""
         };
 
@@ -1374,7 +1374,7 @@
                     "HW4" => @"\\tpea31hwdfs01\專案執行\HW4\0.SOW",
                     "PWR1" => @"\\tpea31hwdfs01\專案執行\PWR1\01.Projects",
                     "PWR2" => @"\\tpea31hwdfs01\專案執行\PWR2\0.SOW",
-                    "PWR2_A32" => @"\\tpea31hwdfs01\專案執行\PWR2\0.SOW",
+                    "PWR2_A32" => @"\\tpea31hwdfs01\專案執行\PWR2_A32\0.SOW",
                     _ => ""
                 };
 
@@ -1643,7 +1643,7 @@
                     // 預設選取 "3-Phase"
                 }
             }
-           
+
 
             // 原有邏輯
             await LoadProjectData();
@@ -1929,42 +1929,58 @@
         StateHasChanged();
         var data = await Task.Run(() =>
         {
-            string tableName = $"ProjectDashboard_{SelectedHwOption}_{SelectedYear}";
+            string tableName = string.Empty;
 
-            // 針對 PWR2_A32 的資料表名稱後綴判斷
-            if (SelectedHwOption == "PWR2_A32")
+            if (SelectedYear <= 2025)
             {
-                // 處理 A32 特有的 Phase Rule
-                if (SelectedPhaseRule == "3-Phase")
+                if (SelectedHwOption == "PWR2_A32")
                 {
-                    tableName += "_3Phase";
+                    tableName = $"ProjectDashboard_PWR2_A32_{SelectedYear}";
                 }
-                else if (SelectedPhaseRule == "2-Phase w/o DB")
+                else
                 {
-                    tableName += "_2PhaseWithoutDB";
-                }
-                else if (SelectedPhaseRule == "2-Phase w/o SI")
-                {
-                    tableName += "_2PhaseWithoutSI";
+                    tableName = $"ProjectDashboard_{SelectedHwOption}_{SelectedYear}";
                 }
             }
             else
             {
-                // 原有的邏輯移至 else 區塊 (針對其他部門)
-                if (SelectedPhaseRule == "3-Phase")
+
+                // 針對 PWR2_A32 的資料表名稱後綴判斷
+                if (SelectedHwOption == "PWR2_A32")
                 {
-                    tableName += "_3Phase";
+                    tableName = $"ProjectDashboard_PWR2_A32_{SelectedYear}";
+                    // 處理 A32 特有的 Phase Rule
+                    if (SelectedPhaseRule == "3-Phase")
+                    {
+                        tableName += "_3Phase";
+                    }
+                    else if (SelectedPhaseRule == "2-Phase w/o DB")
+                    {
+                        tableName += "_2PhaseWithoutDB";
+                    }
+                    else if (SelectedPhaseRule == "2-Phase w/o SI")
+                    {
+                        tableName += "_2PhaseWithoutSI";
+                    }
                 }
-                else if (SelectedPhaseRule == "2-Phase w/o EVT")
+                else
                 {
-                    tableName += "_2PhaseWithoutEVT";
-                }
-                else if (SelectedPhaseRule == "2-Phase w/o DVT2")
-                {
-                    tableName += "_2PhaseWithoutDVT2";
+                    tableName = $"ProjectDashboard_{SelectedHwOption}_{SelectedYear}";
+                    // 原有的邏輯移至 else 區塊 (針對其他部門)
+                    if (SelectedPhaseRule == "3-Phase")
+                    {
+                        tableName += "_3Phase";
+                    }
+                    else if (SelectedPhaseRule == "2-Phase w/o EVT")
+                    {
+                        tableName += "_2PhaseWithoutEVT";
+                    }
+                    else if (SelectedPhaseRule == "2-Phase w/o DVT2")
+                    {
+                        tableName += "_2PhaseWithoutDVT2";
+                    }
                 }
             }
-            
             return ReadSQLdata(tableName);
         });
 
@@ -2319,8 +2335,7 @@
             "HW4" => @"\\tpea31hwdfs01\專案執行\HW4\0.SOW",
             "PWR1" => @"\\tpea31hwdfs01\專案執行\PWR1\01.Projects",
             "PWR2" => @"\\tpea31hwdfs01\專案執行\PWR2\0.SOW",
-            "PWR2_A32" => @"\\tpea31hwdfs01\專案執行\PWR2\0.SOW",
-
+            "PWR2_A32" => @"\\tpea31hwdfs01\專案執行\PWR2_A32\0.SOW",
             _ => ""
         };
         if (string.IsNullOrEmpty(sowPath))
@@ -3428,7 +3443,7 @@
                                 sowTemplateName += "_2PhaseWithoutDVT2";
                             }
                         }
-                        
+
 
                         // 改用 C# 逐行讀取 SOW 範本，以便動態插入 Stage 標題列
 
@@ -3629,39 +3644,112 @@
             // 從SQL 讀取 Project MileStone
             var projectMilestones = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             string infoTableName = $"ProjectDashboard_A31_HWD_{tableNameDepartment}_ProjectInfo";
-            string scheduleQuery = $"SELECT Schedule FROM [{infoTableName}] WHERE ProjectCode = @ProjectCode AND Year = @Year";
+
+            // [新增] 宣告 phaseRule 變數，預設為 N/A
+            string phaseRule = "N/A";
+
+            // SQL 查詢增加 PhaseRule 欄位
+            string scheduleQuery = $"SELECT Schedule, PhaseRule FROM [{infoTableName}] WHERE ProjectCode = @ProjectCode AND Year = @Year";
+
+            // 改用 ExecuteReaderAsync 以同時讀取 Schedule 和 PhaseRule
             using (var scheduleCmd = new SqlCommand(scheduleQuery, conn))
             {
                 scheduleCmd.Parameters.AddWithValue("@ProjectCode", projectName);
                 scheduleCmd.Parameters.AddWithValue("@Year", projectYear);
-                var scheduleResult = await scheduleCmd.ExecuteScalarAsync();
 
-                if (scheduleResult != null && scheduleResult != DBNull.Value)
+                using (var reader = await scheduleCmd.ExecuteReaderAsync())
                 {
-                    string scheduleData = scheduleResult.ToString()!;
-                    var entries = scheduleData.Split('#', StringSplitOptions.RemoveEmptyEntries);
-                    foreach (var entry in entries)
+                    if (await reader.ReadAsync())
                     {
-                        var parts = entry.Split(';');
-                        if (parts.Length == 2 && !string.IsNullOrWhiteSpace(parts[0]) && !string.IsNullOrWhiteSpace(parts[1]))
+                        // 讀取 Schedule 字串
+                        string scheduleData = reader["Schedule"]?.ToString() ?? "";
+                        // 讀取 PhaseRule
+                        phaseRule = reader["PhaseRule"]?.ToString() ?? "N/A";
+
+                        if (!string.IsNullOrWhiteSpace(scheduleData))
                         {
-                            projectMilestones[parts[0].Trim()] = parts[1].Trim();
+                            var entries = scheduleData.Split('#', StringSplitOptions.RemoveEmptyEntries);
+                            foreach (var entry in entries)
+                            {
+                                var parts = entry.Split(';');
+                                if (parts.Length == 2 && !string.IsNullOrWhiteSpace(parts[0]) && !string.IsNullOrWhiteSpace(parts[1]))
+                                {
+                                    projectMilestones[parts[0].Trim()] = parts[1].Trim();
+                                }
+                            }
                         }
                     }
                 }
             }
 
             // Debug: 顯示讀取到的 Milestone 數量
-            Debug.WriteLine($"[DEBUG] Populated {projectMilestones.Count} project milestones.");
+            Debug.WriteLine($"[DEBUG] Populated {projectMilestones.Count} project milestones. PhaseRule: {phaseRule}");
+
             if (!projectMilestones.Any())
             {
-                // Debug: 提示沒有 Milestone，將中止後續處理
                 Debug.WriteLine("[DEBUG] No milestones found for this project. Aborting SOW processing.");
                 return;
             }
 
             var sowRules = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            string sowTableName = $"ProjectDashboard_A31_HWD_{tableNameDepartment}_SOW_{projectYear}";
+
+            // 根據部門與 Phase Rule 決定 SOW 資料表名稱
+            string sowTableName = "";
+
+            if (projectYear <= 2025)
+            {
+                if (projectDepartment == "PWR2_A32")
+                {
+                    sowTableName = $"ProjectDashboard_A31_HWD_{tableNameDepartment}_SOW_A32_{projectYear}";
+                }
+                else
+                {
+                    sowTableName = $"ProjectDashboard_A31_HWD_{tableNameDepartment}_SOW_{projectYear}";
+                }
+
+            }
+            else
+            {
+                if (projectDepartment == "PWR2_A32")
+                {
+                    // A32 的基礎 SOW 表名
+                    sowTableName = $"ProjectDashboard_A31_HWD_電源部_SOW_A32_{projectYear}";
+
+                    // A32 特有的 Phase Rule 後綴處理
+                    if (phaseRule == "3-Phase")
+                    {
+                        sowTableName += "_3Phase";
+                    }
+                    else if (phaseRule == "2-Phase w/o DB")
+                    {
+                        sowTableName += "_2PhaseWithoutDB";
+                    }
+                    else if (phaseRule == "2-Phase w/o SI")
+                    {
+                        sowTableName += "_2PhaseWithoutSI";
+                    }
+                }
+                else
+                {
+                    // 其他部門的基礎 SOW 表名
+                    sowTableName = $"ProjectDashboard_A31_HWD_{tableNameDepartment}_SOW_{projectYear}";
+
+                    // 其他部門的 Phase Rule 後綴處理
+                    if (phaseRule == "3-Phase")
+                    {
+                        sowTableName += "_3Phase";
+                    }
+                    else if (phaseRule == "2-Phase w/o EVT")
+                    {
+                        sowTableName += "_2PhaseWithoutEVT";
+                    }
+                    else if (phaseRule == "2-Phase w/o DVT2")
+                    {
+                        sowTableName += "_2PhaseWithoutDVT2";
+                    }
+                }
+            }
+
             // 將查詢的欄位從 [D-Date] 改為 [D-X]
             string sowQuery = $"SELECT Item, [D-X] FROM [{sowTableName}] WHERE [D-X] IS NOT NULL AND [D-X] != ''";
             using (var sowCmd = new SqlCommand(sowQuery, conn))
@@ -3699,11 +3787,6 @@
                     continue;
                 }
 
-                string abc = "";
-                if (cleanedCellValue.ToString().IndexOf("!")>-1)
-                {
-                    abc += "ABC";
-                }
                 // Debug: 顯示正在處理的 Item 名稱
                 Debug.WriteLine($"[DEBUG] Processing Item: '{itemToUpdate}'");
                 if (sowRules.TryGetValue(itemToUpdate, out var dDateRule))
@@ -3827,8 +3910,58 @@
             return;
         }
 
-        // 組合目標資料表名稱
-        string tableName = $"ProjectDashboard_{SelectedHwOption}_{SelectedYear}";
+        // [修改] 組合目標資料表名稱 (加入 PWR2_A32 與 Phase Rule 的判斷)
+        string tableName = string.Empty;
+
+        if (SelectedYear <= 2025)
+        {
+            if (SelectedHwOption == "PWR2_A32")
+            {
+                tableName = $"ProjectDashboard_A31_HWD_{SelectedHwOption}_SOW_A32_{SelectedYear}";
+            }
+            else
+            {
+                tableName = $"ProjectDashboard_A31_HWD_{SelectedHwOption}_SOW_{SelectedYear}";
+            }
+        }
+        else
+        {
+            tableName = $"ProjectDashboard_{SelectedHwOption}_{SelectedYear}";
+            if (SelectedHwOption == "PWR2_A32")
+            {
+                // [新增] 針對 PWR2_A32 的特殊後綴判斷
+                if (SelectedPhaseRule == "3-Phase")
+                {
+                    tableName += "_3Phase";
+                }
+                else if (SelectedPhaseRule == "2-Phase w/o DB")
+                {
+                    tableName += "_2PhaseWithoutDB";
+                }
+                else if (SelectedPhaseRule == "2-Phase w/o SI")
+                {
+                    tableName += "_2PhaseWithoutSI";
+                }
+            }
+            else
+            {
+                // [修改] 針對其他部門的原有邏輯
+                if (SelectedPhaseRule == "3-Phase")
+                {
+                    tableName += "_3Phase";
+                }
+                else if (SelectedPhaseRule == "2-Phase w/o EVT")
+                {
+                    tableName += "_2PhaseWithoutEVT";
+                }
+                else if (SelectedPhaseRule == "2-Phase w/o DVT2")
+                {
+                    tableName += "_2PhaseWithoutDVT2";
+                }
+            }
+        }
+        
+
         // 取得寫入用的連線字串
         string connectionString = _configuration.GetConnectionString("WriteConnection_A31_HWD_PWR");
         if (string.IsNullOrEmpty(connectionString))
