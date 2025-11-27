@@ -59,14 +59,22 @@
                             <div class="card-body text-center p-5 border border-2 border-dashed rounded">
                                 <i class="bi bi-cloud-upload fs-1 text-primary mb-3"></i>
 
+                                @* 原有的 InputFile 區塊 *@
                                 <div class="mb-3">
-                                    <InputFile OnChange="HandleFileSelected" class="form-control" accept=".dsn, .net" />
+                                    @* [移除] <InputFile OnChange="HandleFileSelected" class="form-control" accept=".dsn, .net" /> *@
+
+                                    @* 改用按鈕呼叫 MAUI 原生檔案選擇器 *@
+                                    <button class="btn btn-outline-primary w-100 py-2" @onclick="PickFile">
+                                        <i class="bi bi-folder2-open"></i> 選擇 DSN 或 NET 檔案
+                                    </button>
                                 </div>
 
                                 @if (uploadedFile != null)
                                 {
                                     <div class="alert alert-success d-inline-block mt-2">
-                                        <i class="bi bi-file-earmark-check"></i> 已選擇檔案: <strong>@uploadedFile.Name</strong> (@(uploadedFile.Size / 1024) KB)
+                                        @* FileResult 的屬性名稱略有不同 (Name -> FileName), 且無法直接取得 Size (需透過 FileInfo) *@
+                                        <i class="bi bi-file-earmark-check"></i> 已選擇檔案: <strong>@uploadedFile.FileName</strong>
+                                        @* 這裡省略大小顯示，或需在 C# 中另外計算 *@
                                     </div>
                                     <div class="mt-3">
                                         <button class="btn btn-primary btn-lg" @onclick="StartAnalysis" disabled="@isAnalyzing">
@@ -143,7 +151,7 @@
                         <div class="card-header d-flex justify-content-between align-items-center">
                             <span><i class="bi bi-diagram-3"></i> 拓撲圖預覽</span>
 
-                            @* [新增] 縮放工具列按鈕 *@
+                            @* 縮放工具列按鈕 *@
                             <div class="btn-group btn-group-sm">
                                 <button type="button" class="btn btn-outline-secondary" @onclick="ZoomIn" title="放大">
                                     <i class="bi bi-zoom-in"></i>
@@ -296,7 +304,9 @@
     private int activeTab = 0;
 
     // 檔案上傳相關變數
-    private IBrowserFile? uploadedFile;
+    // 將 IBrowserFile 改為 MAUI 的 FileResult
+    // private IBrowserFile? uploadedFile;
+    private FileResult? uploadedFile;
     private bool isAnalyzing = false;
     private string analysisMessage = string.Empty;
 
@@ -322,13 +332,38 @@
     // 定義 BlazorDiagram 物件 - 改為可空類型，延遲初始化
     private BlazorDiagram? MyDiagram { get; set; }
 
-    // 處理檔案選擇事件
-    private void HandleFileSelected(InputFileChangeEventArgs e)
+    // 用於拓撲圖每一層目前的 Y 軸高度紀錄，Key=LayerIndex, Value=CurrentY
+    private Dictionary<int, int> layerYPositions = new Dictionary<int, int>();
+
+    private async Task PickFile()
     {
-        // 限制最大檔案大小 (例如 50MB)
-        long maxFileSize = 1024 * 1024 * 50;
-        uploadedFile = e.File;
-        analysisMessage = "檔案已準備就緒，請點擊「開始分析」。";
+        try
+        {
+            var customFileType = new FilePickerFileType(
+                new Dictionary<DevicePlatform, IEnumerable<string>>
+                {
+                    { DevicePlatform.WinUI, new[] { ".dsn", ".net" } },
+                    { DevicePlatform.macOS, new[] { "dsn", "net" } },
+                });
+
+            var options = new PickOptions
+            {
+                PickerTitle = "請選擇線路圖檔案 (.dsn, .net)",
+                FileTypes = customFileType,
+            };
+
+            var result = await FilePicker.Default.PickAsync(options);
+
+            if (result != null)
+            {
+                uploadedFile = result;
+                analysisMessage = "檔案已準備就緒，請點擊「開始分析」。";
+            }
+        }
+        catch (Exception ex)
+        {
+            analysisMessage = $"選擇檔案時發生錯誤: {ex.Message}";
+        }
     }
     // 拓撲圖縮放控制方法
     private void ZoomIn()
@@ -373,7 +408,6 @@
     private async Task StartAnalysis()
     {
         if (uploadedFile == null) return;
-
         isAnalyzing = true;
         analysisMessage = "初始化環境中...";
         StateHasChanged();
@@ -385,25 +419,35 @@
 
             // 步驟 2: 判斷副檔名並決定儲存檔名
             // Form1 邏輯：DSN 需命名為 0.DSN 以配合 Script; NET 檔則依原名或直接存入
-            string extension = Path.GetExtension(uploadedFile.Name).ToLower();
-            string tempFileName = (extension == ".dsn") ? "0.DSN" : uploadedFile.Name;
+            string extension = Path.GetExtension(uploadedFile.FileName).ToLower();
+            string tempFileName = (extension == ".dsn") ? "0.DSN" : uploadedFile.FileName;
             string fullPath = Path.Combine(TempFolderPath, tempFileName);
 
             // 限制讀取大小 (50MB)
             long maxFileSize = 1024 * 1024 * 50;
-
             analysisMessage = $"正在儲存檔案至 {fullPath}...";
             StateHasChanged();
 
             // 將檔案寫入本機暫存區
             await using (var fileStream = new FileStream(fullPath, FileMode.Create))
             {
-                await uploadedFile.OpenReadStream(maxFileSize).CopyToAsync(fileStream);
+                // FileResult 的 OpenReadAsync 不需要參數
+                using (var sourceStream = await uploadedFile.OpenReadAsync())
+                {
+                    await sourceStream.CopyToAsync(fileStream);
+                }
             }
 
             // 步驟 3: 依照檔案類型執行對應邏輯
             if (extension == ".dsn")
             {
+                // DSN 檔案處理前，先執行 OrCAD 設定檔複製
+                analysisMessage = "正在設定 OrCAD 環境參數 (複製 Config)...";
+                StateHasChanged();
+
+                // 使用 Task.Run 執行檔案複製以避免卡住 UI
+                await Task.Run(() => SetupOrCADConfig());
+
                 // [Case A] DSN 檔案：需呼叫外部 EXE 轉成 Netlist
                 analysisMessage = "正在呼叫 OrCAD Capture 產生 Netlist...";
                 StateHasChanged();
@@ -413,7 +457,6 @@
 
                 // 轉檔完成後，Script 預設會產生 "0.NET" 於同目錄
                 string generatedNetlistPath = Path.Combine(TempFolderPath, "0.NET");
-
                 if (File.Exists(generatedNetlistPath))
                 {
                     analysisMessage = "正在讀取生成的 Netlist...";
@@ -456,7 +499,39 @@
             // CreatePowerToolTempFolder(TempFolderPath);
         }
     }
+    // 設定 OrCAD Config 子程式：複製網路磁碟上的設定檔到本機 Cadence 目錄
+    private void SetupOrCADConfig()
+    {
+        // 定義來源路徑
+        string SetConfigPath = @"\\tpea31hwdfs01\Automation\Automation Software\OrCAD_Script\Cadence_SPB24_1 Setting File";
 
+        try
+        {
+            // 確保來源路徑存在
+            if (!Directory.Exists(SetConfigPath))
+            {
+                // 若網路路徑無法存取，視需求決定是否拋出例外或僅紀錄 Log
+                // 這裡選擇拋出例外以中止後續 OrCAD 操作
+                throw new DirectoryNotFoundException($"無法存取設定檔來源路徑: {SetConfigPath}");
+            }
+
+            // 執行複製動作 (參數: 來源, 目的, 是否覆蓋)
+
+            // 1. Copy to C:\Cadence
+            CopyDirectory(SetConfigPath, @"C:\Cadence", true);
+
+            // 2. Copy to C:\Cadence\SPB_24.1\tools\capture
+            CopyDirectory(SetConfigPath, @"C:\Cadence\SPB_24.1\tools\capture", true);
+
+            // 3. Copy to C:\SPB_Data\cdssetup\OrCAD_Capture\24.1.0
+            CopyDirectory(SetConfigPath, @"C:\SPB_Data\cdssetup\OrCAD_Capture\24.1.0", true);
+        }
+        catch (Exception ex)
+        {
+            // 捕捉複製過程中的錯誤 (如權限不足、路徑不存在等)
+            throw new Exception($"OrCAD 環境設定失敗: {ex.Message}");
+        }
+    }
     // 資料模型：Level Shifter 檢查結果
     public class LevelShifterCheckResult
     {
@@ -479,64 +554,99 @@
         // 判斷是否整體失敗
         public bool IsOverallFail => PowerRailStatus == CheckStatus.Fail || PullUpStatus == CheckStatus.Fail || VgsStatus == CheckStatus.Fail;
     }
+    // 輔助方法：判斷是否為感興趣的 Net (包含 SMB, I2C, SCL, SDA 等)
+    private bool IsInterestingNet(string netName)
+    {
+        var upper = netName.ToUpper();
+        return upper.Contains("SMBCLK");
+    }
+
+    // 輔助方法：過濾電源與地線，避免拓撲圖發散
+    private bool IsPowerOrGroundNet(string netName)
+    {
+        var upper = netName.ToUpper();
+        //常見電源命名規則
+        if (upper.StartsWith("+") || upper.Contains("GND") || upper.Contains("VCC") || upper.Contains("VDD") || upper.Contains("VSS"))
+        {
+            return true;
+        }
+        return false;
+    }
+    // RunTopologyCheck 方法，改為支援多層級追蹤
     private void RunTopologyCheck()
     {
         try
         {
             // 強制重置圖表狀態
             isDiagramReady = false;
-            StateHasChanged(); // [修改] 這裡不需要 await，因為是 void 方法，但在 Blazor Server/Hybrid 通常沒問題
+            StateHasChanged();
 
-            analysisMessage = $"正在執行拓撲檢查... 目標元件: CPU[{CpuRef}], PCH[{PchRef}], EC[{EcRef}]";
+            analysisMessage = $"正在執行深度拓撲檢查... 目標: CPU[{CpuRef}], PCH[{PchRef}], EC[{EcRef}]";
+            // 確保舊的 Diagram 物件事件被移除，避免記憶體洩漏 (雖然後面會 new 新的，但養成好習慣)
+            if (MyDiagram != null)
+            {
+                MyDiagram.SelectionChanged -= OnSelectionChanged;
+            }
 
-            // 重新初始化
+            // 初始化 Diagram
             MyDiagram = new BlazorDiagram();
 
-            // [修改] 維持使用 NormalRouter (貝茲曲線)，配合 Port 會有很好的 S 型效果
+            // 註冊選取變更事件，用於點擊 Highlight 功能
+            MyDiagram.SelectionChanged += OnSelectionChanged;
+
             MyDiagram.Options.Links.DefaultRouter = new Blazor.Diagrams.Core.Routers.NormalRouter();
-
-            // [新增] 設定路徑生成器為 SmoothPathGenerator (讓轉折更圓滑) - 選用，通常 Router 就夠了
-            // MyDiagram.Options.Links.DefaultPathGenerator = new Blazor.Diagrams.Core.PathGenerators.SmoothPathGenerator();
-
             MyDiagram.Options.Zoom.Enabled = true;
             MyDiagram.Options.AllowMultiSelection = false;
 
-            // [修改] 大幅增加 X 軸距離 (400 -> 600) 以拉平曲線，增加文字空間
-            int nodeX = 600;
-            int nodeY = 50;
-            // [修改] 增加垂直間距 (120 -> 100~150)，視元件數量而定，這裡設 130
-            int nodeYGap = 130;
+            // 暫停刷新以提升效能，避免在迴圈中頻繁重繪
+            MyDiagram.SuspendRefresh = true;
 
-            // 建立 CPU 節點
-            var cpuNode = new NodeModel(position: new Point(50, 300))
+            // 重置層級高度紀錄與訪問紀錄
+            layerYPositions.Clear();
+            HashSet<string> visitedComponents = new HashSet<string>();
+            HashSet<string> visitedNets = new HashSet<string>();
+
+            // 建立節點查找表，避免重複建立 Node (Key: RefDes, Value: NodeModel)
+            Dictionary<string, NodeModel> nodeLookup = new Dictionary<string, NodeModel>();
+
+            // 定義 CPU 預設位置
+            int startX = 50;
+            int startY = 300;
+            string targetCpuRef = string.IsNullOrEmpty(CpuRef) ? "CPU" : CpuRef;
+
+            // 建立 Root (CPU) 節點
+            var cpuNode = new NodeModel(position: new Point(startX, startY))
             {
-                Title = string.IsNullOrEmpty(CpuRef) ? "CPU" : CpuRef,
+                Title = targetCpuRef,
                 Locked = true
             };
-
-            // [新增] 為 CPU 增加一個「右側」的連接埠 (Port)
-            // 這樣所有線條都會強制從右邊水平射出，解決箭頭亂指的問題
-            var cpuPort = cpuNode.AddPort(PortAlignment.Right);
-
+            var cpuPort = cpuNode.AddPort(PortAlignment.Right); // CPU 輸出埠
             MyDiagram.Nodes.Add(cpuNode);
 
-            // 核心邏輯：遍歷 NetList 尋找 SMBCLK 相關連線
-            for (int i = 0; i < ContentNetListArray.Count; i++)
+            // 加入查找表與已訪問清單
+            nodeLookup.Add(targetCpuRef, cpuNode);
+            visitedComponents.Add(targetCpuRef);
+
+            // 定義 BFS 佇列
+            // Tuple 結構: (當前元件 Ref, 來源節點 NodeModel, 來源 PortModel, 連接過來的 Net 名稱, 目前層級 Layer)
+            Queue<(string CompRef, NodeModel SourceNode, PortModel SourcePort, string ViaNetName, int Layer)> bfsQueue
+                = new Queue<(string, NodeModel, PortModel, string, int)>();
+
+            // ---------------------------------------------------------
+            // 步驟 1: 找出 CPU 第一層包含 "SMBCLK", "I2C" 等關鍵字的起始 Net
+            // ---------------------------------------------------------
+            foreach (var netRow in ContentNetListArray)
             {
-                string netName = ContentNetListArray[i][0].ToString();
+                string netName = netRow[0].ToString();
 
-                if (netName.IndexOf("SMBCLK", StringComparison.OrdinalIgnoreCase) > -1)
+                // 寬鬆過濾條件，只要包含關鍵字且不是電源地線
+                if (IsInterestingNet(netName) && !IsPowerOrGroundNet(netName))
                 {
+                    // 檢查此 Net 是否連到 CPU
                     bool isCpuInThisNet = false;
-                    string targetCpuRef = string.IsNullOrEmpty(CpuRef) ? "CPU" : CpuRef;
-
-                    // 檢查是否包含 CPU (這段邏輯保持不變)
-                    for (int checkIdx = 1; checkIdx < ContentNetListArray[i].Count; checkIdx++)
+                    for (int i = 1; i < netRow.Count; i++)
                     {
-                        string pinData = ContentNetListArray[i][checkIdx].ToString();
-                        string componentRef = pinData.Split('^')[0];
-
-                        if (componentRef.Equals(targetCpuRef, StringComparison.OrdinalIgnoreCase))
+                        if (netRow[i].Split('^')[0].Equals(targetCpuRef, StringComparison.OrdinalIgnoreCase))
                         {
                             isCpuInThisNet = true;
                             break;
@@ -545,69 +655,205 @@
 
                     if (isCpuInThisNet)
                     {
-                        for (int k = 1; k < ContentNetListArray[i].Count; k++)
+                        // 將此 Net 上的其他元件加入佇列 (Layer 1)
+                        foreach (var pinInfo in netRow.Skip(1)) // 跳過 netName
                         {
-                            string rawPinData = ContentNetListArray[i][k].ToString();
-                            string currentRefDes = rawPinData.Split('^')[0];
-
-                            if (currentRefDes.Equals(targetCpuRef, StringComparison.OrdinalIgnoreCase))
+                            string compRef = pinInfo.Split('^')[0];
+                            if (!compRef.Equals(targetCpuRef, StringComparison.OrdinalIgnoreCase))
                             {
-                                continue;
+                                // 加入佇列，準備在 While 迴圈中建立節點
+                                bfsQueue.Enqueue((compRef, cpuNode, cpuPort, netName, 1));
                             }
-
-                            var existingNode = MyDiagram.Nodes.FirstOrDefault(n => n.Title == currentRefDes);
-                            NodeModel targetNode;
-
-                            // [新增] 定義目標 Port 變數
-                            PortModel targetPort;
-
-                            if (existingNode == null)
-                            {
-                                targetNode = new NodeModel(position: new Point(nodeX, nodeY))
-                                {
-                                    Title = currentRefDes,
-                                    Locked = true
-                                };
-
-                                // [新增] 為目標元件增加一個「左側」的連接埠
-                                // 這樣線條會水平進入元件左側正中央
-                                targetPort = targetNode.AddPort(PortAlignment.Left);
-
-                                MyDiagram.Nodes.Add(targetNode);
-                                nodeY += nodeYGap;
-                            }
-                            else
-                            {
-                                targetNode = existingNode;
-                                // [新增] 如果節點已存在，嘗試取得現有的左側 Port，沒有就新增
-                                targetPort = targetNode.Ports.FirstOrDefault(p => p.Alignment == PortAlignment.Left)
-                                             ?? targetNode.AddPort(PortAlignment.Left);
-                            }
-
-                            // [修改] 建立連線：改為連接 Port (cpuPort -> targetPort) 而非 Node -> Node
-                            // 這能確保線條的起始與結束角度都是水平的
-                            var link = new LinkModel(cpuPort, targetPort);
-                            link.TargetMarker = LinkMarker.Arrow;
-                            link.Color = "#6c757d";
-
-                            // [修改] 設定標籤位置
-                            // 由於使用了 Port 與較寬的 X 距離，S 型曲線的中段 (0.5) 或後段 (0.7) 空間會變大
-                            var linkLabel = new Blazor.Diagrams.Core.Models.LinkLabelModel(link, netName)
-                            {
-                                Distance = 0.65, // [修改] 設在 65% 處，配合 S 型曲線，通常這裡是線條分開最明顯的地方
-                                Offset = new Point(0, -15) // [修改] 稍微往上抬一點，避免壓線
-                            };
-
-                            link.Labels.Add(linkLabel);
-                            MyDiagram.Links.Add(link);
                         }
+                        visitedNets.Add(netName); // 標記此 Net 已處理，避免重複
                     }
                 }
             }
 
-            isDiagramReady = true;
-            analysisMessage = $"拓撲檢查完成！已產生 {MyDiagram.Nodes.Count} 個節點，{MyDiagram.Links.Count} 條連線。";
+            // ---------------------------------------------------------
+            // 步驟 2: 開始 BFS 迴圈，層層展開
+            // ---------------------------------------------------------
+            // 設定最大深度防止無限迴圈 (例如設為 5 層)
+            int maxDepth = 5;
 
+            while (bfsQueue.Count > 0)
+            {
+                var currentItem = bfsQueue.Dequeue();
+                string currentRef = currentItem.CompRef;
+                NodeModel sourceNode = currentItem.SourceNode;
+                PortModel sourcePort = currentItem.SourcePort; // 來源的 Port (上一層的輸出)
+                string incomingNetName = currentItem.ViaNetName;
+                int currentLayer = currentItem.Layer;
+
+                if (currentLayer > maxDepth) continue;
+
+                // 處理節點建立 (如果已存在就共用，如果是新的就建立)
+                NodeModel currentNode;
+                PortModel inputPort; // 用於接收來源訊號的 Port (左側)
+
+                if (nodeLookup.ContainsKey(currentRef))
+                {
+                    currentNode = nodeLookup[currentRef];
+                    // 嘗試取得左側 Port，若無則新增 (用於接收)
+                    inputPort = currentNode.Ports.FirstOrDefault(p => p.Alignment == PortAlignment.Left)
+                                ?? currentNode.AddPort(PortAlignment.Left);
+                }
+                else
+                {
+                    // 計算位置
+                    int nodeX = startX + (currentLayer * 400); // 每層 X 間距 400
+
+                    // 取得該層目前的 Y，若無則從 50 開始
+                    if (!layerYPositions.ContainsKey(currentLayer)) layerYPositions[currentLayer] = 50;
+
+                    int nodeY = layerYPositions[currentLayer];
+
+                    currentNode = new NodeModel(position: new Point(nodeX, nodeY))
+                    {
+                        Title = currentRef,
+                        Locked = true
+                    };
+                    inputPort = currentNode.AddPort(PortAlignment.Left); // 左側 Input
+                    MyDiagram.Nodes.Add(currentNode);
+
+                    nodeLookup.Add(currentRef, currentNode);
+                    visitedComponents.Add(currentRef);
+
+                    // 更新該層的 Y 軸高度，保留間距 (例如 120)
+                    layerYPositions[currentLayer] += 120;
+                }
+
+                // 建立連線 (從上一層連過來)
+                // Z.Blazor.Diagrams v3+ 使用 Source/Target Anchor，需轉型為 SinglePortAnchor 才能取得 Port
+                bool linkExists = MyDiagram.Links
+                    .OfType<LinkModel>()
+                    .Any(l => (l.Source as Blazor.Diagrams.Core.Anchors.SinglePortAnchor)?.Port == sourcePort &&
+                              (l.Target as Blazor.Diagrams.Core.Anchors.SinglePortAnchor)?.Port == inputPort);
+
+                if (!linkExists)
+                {
+                    var link = new LinkModel(sourcePort, inputPort);
+                    link.TargetMarker = LinkMarker.Arrow;
+                    link.Color = "#6c757d"; // 灰色線條
+
+                    // 加入 Net Name 標籤
+                    var linkLabel = new Blazor.Diagrams.Core.Models.LinkLabelModel(link, incomingNetName)
+                    {
+                        Distance = 1.00, // 標籤置中
+                        Offset = new Point(-60, 15) // 稍微往左下
+                    };
+                    link.Labels.Add(linkLabel);
+                    MyDiagram.Links.Add(link);
+                }
+
+                // 檢查 currentRef 是否以 "U" 或 "J" 開頭
+                if (currentRef.StartsWith("U", StringComparison.OrdinalIgnoreCase) ||
+                    currentRef.StartsWith("J", StringComparison.OrdinalIgnoreCase) )
+                {
+                    // 雖然畫出了這個元件，但不將其下一層加入 Queue，直接換下一個處理
+                    continue;
+                }
+
+                // ---------------------------------------------------------
+                // 步驟 3: 尋找此元件 "延伸出去" 的 Net (往下一層找)
+                // ---------------------------------------------------------
+                // 為該節點新增一個右側輸出 Port，供下一層使用
+                var outputPort = currentNode.Ports.FirstOrDefault(p => p.Alignment == PortAlignment.Right)
+                                 ?? currentNode.AddPort(PortAlignment.Right);
+
+                foreach (var netRow in ContentNetListArray)
+                {
+                    string nextNetName = netRow[0].ToString();
+
+                    // 1. 忽略來源 Net (避免回頭)
+                    if (nextNetName == incomingNetName) continue;
+
+                    // 2. 優先檢查連接性：確認目前的 NetList Row 是否真的包含當前元件 (currentRef)
+                    // 如果這個 Net 上面沒有目前的元件，代表無關，直接跳過
+                    bool doesNetContainCurrentComp = false;
+                    foreach (var pin in netRow.Skip(1)) // Skip netName
+                    {
+                        if (pin.Split('^')[0].Equals(currentRef, StringComparison.OrdinalIgnoreCase))
+                        {
+                            doesNetContainCurrentComp = true;
+                            break;
+                        }
+                    }
+
+                    if (!doesNetContainCurrentComp) continue;
+
+                    // 3. 處理電源與地線 (確認有連接後才執行)
+                    // 條件：開頭為 + 或包含 GND, VCC, VDD, VSS
+                    if (IsPowerOrGroundNet(nextNetName))
+                    {
+                        // 計算電源節點位置 (放在下一層)
+                        int nextLayer = currentLayer + 1;
+                        int nodeX = startX + (nextLayer * 400);
+
+                        // 取得該層目前的 Y
+                        if (!layerYPositions.ContainsKey(nextLayer)) layerYPositions[nextLayer] = 50;
+                        int nodeY = layerYPositions[nextLayer];
+
+                        // 建立電源節點
+                        var powerNode = new NodeModel(position: new Point(nodeX, nodeY))
+                        {
+                            Title = nextNetName,
+                            Locked = true
+                        };
+
+                        // 加上特定 Class 以便未來可以用 CSS 將其變成圓形或不同顏色
+                        // powerNode.CssClass = "power-node";
+
+                        var powerInputPort = powerNode.AddPort(PortAlignment.Left);
+                        MyDiagram.Nodes.Add(powerNode);
+
+                        // 更新 Y 軸高度 (電源節點通常較小，間距設小一點)
+                        layerYPositions[nextLayer] += 80;
+
+                        // 建立連線 (紅色以示區別)
+                        var pLink = new LinkModel(outputPort, powerInputPort);
+                        pLink.TargetMarker = LinkMarker.Arrow;
+                        pLink.Color = "#dc3545"; // 使用紅色線條
+
+                        // 加入 Net Name 標籤
+                        pLink.Labels.Add(new Blazor.Diagrams.Core.Models.LinkLabelModel(pLink, nextNetName)
+                        {
+                            Distance = 0.5,
+                            Offset = new Point(0, -10)
+                        });
+                        MyDiagram.Links.Add(pLink);
+
+                        // [關鍵] 電源/地線為終端節點，停止往後找
+                        continue;
+                    }
+
+                    // 4. 一般訊號處理 (因為前面已經檢查過 doesNetContainCurrentComp，這裡直接處理 Queue)
+                    // 忽略已經走過的 Net
+                    if (visitedNets.Contains(nextNetName)) continue;
+
+                    // 將 Net 上的其他元件加入 Queue
+                    foreach (var pinInfo in netRow.Skip(1))
+                    {
+                        string nextCompRef = pinInfo.Split('^')[0];
+
+                        // 避免回頭路：不要加自己，也不要加 CPU
+                        if (!nextCompRef.Equals(currentRef, StringComparison.OrdinalIgnoreCase) &&
+                            !nextCompRef.Equals(targetCpuRef, StringComparison.OrdinalIgnoreCase))
+                        {
+                            bfsQueue.Enqueue((nextCompRef, currentNode, outputPort, nextNetName, currentLayer + 1));
+                        }
+                    }
+                    // 標記此 Net 已處理
+                    visitedNets.Add(nextNetName);
+                }
+            }
+
+            // 恢復刷新並重繪
+            MyDiagram.SuspendRefresh = false;
+            MyDiagram.Refresh();
+
+            isDiagramReady = true;
+            analysisMessage = $"拓撲檢查完成！已產生 {MyDiagram.Nodes.Count} 個節點，{MyDiagram.Links.Count} 條連線 (深度: {maxDepth})。";
             StateHasChanged();
         }
         catch (Exception ex)
@@ -617,6 +863,108 @@
             MyDiagram = null;
             StateHasChanged();
         }
+    }
+    // 當圖表上的物件選取狀態改變時觸發
+    private void OnSelectionChanged(Blazor.Diagrams.Core.Models.Base.Model model)
+    {
+        // 取得目前所有被選取的物件
+        var selectedModels = MyDiagram?.GetSelectedModels();
+        // 如果沒有選取任何東西，或者選取的是 Node (不是線)，則重置顏色
+        if (selectedModels == null || !selectedModels.Any())
+        {
+            ResetLinkColors();
+            MyDiagram?.Refresh();
+            // 確保 UI 立即更新
+            StateHasChanged();
+            return;
+        }
+
+        // 檢查是否選取了 Link (連線)
+        var selectedLink = selectedModels.FirstOrDefault(m => m is LinkModel) as LinkModel;
+        if (selectedLink != null)
+        {
+            // 嘗試從 Link 的 Label 取得 Net Name
+            // 假設 Label[0] 存放 Net Name (依照我們建立 Link 的邏輯)
+            var labelModel = selectedLink.Labels.FirstOrDefault() as Blazor.Diagrams.Core.Models.LinkLabelModel;
+            if (labelModel != null && !string.IsNullOrEmpty(labelModel.Content))
+            {
+                string selectedNetName = labelModel.Content;
+                HighlightNet(selectedNetName);
+            }
+        }
+        else
+        {
+            // 如果選到的不是 Link (例如選到 Node)，為了避免混淆，也可以選擇重置或保持現狀
+            // 這裡選擇重置，讓畫面乾淨
+            ResetLinkColors();
+        }
+
+        MyDiagram?.Refresh();
+
+        // 強制 Blazor 元件重繪，解決點選後需滑鼠滑過才變色的問題
+        StateHasChanged();
+    }
+
+    private void HighlightNet(string targetNetName)
+    {
+        if (MyDiagram == null) return;
+
+
+        foreach (var link in MyDiagram.Links.OfType<LinkModel>())
+        {
+            // 取得該 Link 的 Net Name
+            var label = link.Labels.FirstOrDefault() as Blazor.Diagrams.Core.Models.LinkLabelModel;
+            string linkNetName = label?.Content ?? string.Empty;
+
+            // 比對名稱 (忽略大小寫)
+            if (linkNetName.Equals(targetNetName, StringComparison.OrdinalIgnoreCase))
+            {
+                // 設為綠色 (Bootstrap Success Color)
+                link.Color = "#198754";
+                // 加粗線條 (選用)
+                link.Width = 4;
+            }
+            else
+            {
+                // 非相關連線，設為淡灰色或原本的深灰色
+                link.Color = "#dee2e6";
+                // 變淡，凸顯綠色
+                link.Width = 2;
+            }
+
+            // 通知該 Link 進行重繪
+            link.Refresh();
+        }
+
+    }
+
+    // 重置所有連線顏色為預設值
+    private void ResetLinkColors()
+    {
+        if (MyDiagram == null) return;
+
+        foreach (var link in MyDiagram.Links.OfType<LinkModel>())
+        {
+            // 判斷是否為電源線 (紅色) 或一般訊號線 (灰色)
+            var label = link.Labels.FirstOrDefault() as Blazor.Diagrams.Core.Models.LinkLabelModel;
+            string netName = label?.Content ?? string.Empty;
+
+            if (IsPowerOrGroundNet(netName))
+            {
+                link.Color = "#dc3545"; // Red
+            }
+            else
+            {
+                link.Color = "#6c757d"; // Gray
+            }
+
+            link.Width = 2; // 預設寬度
+
+            // 通知該 Link 進行重繪
+            link.Refresh();
+        }
+
+        // MyDiagram.SuspendRefresh = false; // [移除]
     }
 
     // 資料模型：Bus 配置與地址檢查

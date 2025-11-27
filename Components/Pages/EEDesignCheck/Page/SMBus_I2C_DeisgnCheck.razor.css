@@ -141,3 +141,22 @@
     opacity: 1; /* 確保不透明 */
 }
 
+/* [新增] 設定 Link Label (連線標籤) 的樣式，強制水平顯示 */
+::deep .diagram-link-label {
+    /* ...原有設定... */
+    margin-top: -10px;
+    margin-left: -20px;
+    white-space: nowrap;
+    background-color: #ffffff;
+    padding: 2px 6px;
+    border-radius: 4px;
+    /* [修改] 加粗邊框與陰影，確保在淡色連線旁依然可讀 */
+    border: 1px solid #adb5bd;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    font-size: 0.8rem;
+    color: #495057;
+    font-weight: bold;
+    z-index: 5;
+}
+
+
