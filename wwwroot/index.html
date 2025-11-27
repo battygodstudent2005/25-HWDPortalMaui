@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="HWDPortalMaui.styles.css" />
     <link rel="icon" type="image/png" href="favicon.png" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link href="_content/Z.Blazor.Diagrams/style.css" rel="stylesheet" />
 </head>
 
 <body>
@@ -49,14 +50,14 @@
             toastElement.setAttribute('aria-atomic', 'true');
 
             toastElement.innerHTML = `
-                        <div class="d-flex">
-                            <div class="toast-body">
-                                <i class="bi ${details.icon} me-2"></i>
-                                ${message}
+                            <div class="d-flex">
+                                <div class="toast-body">
+                                    <i class="bi ${details.icon} me-2"></i>
+                                    ${message}
+                                </div>
+                                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
                             </div>
-                            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-                        </div>
-                    `;
+                        `;
 
             // 將建立好的 Toast 元素加入到容器中
             toastContainer.appendChild(toastElement);
@@ -149,6 +150,7 @@
             }
         }
     </script>
+    <script src="_content/Z.Blazor.Diagrams/script.min.js"></script>
 
 </body>
 

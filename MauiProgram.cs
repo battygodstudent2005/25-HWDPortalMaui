@@ -38,7 +38,6 @@ namespace HWDPortalMaui
             builder.Services.AddBlazorWebViewDeveloperTools();
             builder.Logging.AddDebug();
 #endif
-
             builder.Services.AddHttpClient();
             builder.Services.AddSingleton<UserInfoService>();
             builder.Services.AddSingleton<BulletinService>();

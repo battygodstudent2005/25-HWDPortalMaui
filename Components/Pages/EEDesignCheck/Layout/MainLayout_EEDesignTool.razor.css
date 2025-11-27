@@ -1,0 +1,66 @@
+﻿/* [新增] 複製自 MainLayout.razor.css */
+
+.page {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+main {
+    flex: 1;
+    min-width: 0;
+}
+
+/* 側邊欄背景色 (稍微不同以示區別) */
+.sidebar {
+    background-image: linear-gradient(180deg, rgb(5, 39, 103) 0%, #3a0647 70%);
+}
+
+.top-row {
+    background-color: #f7f7f7;
+    border-bottom: 1px solid #d6d5d5;
+    justify-content: flex-end;
+    height: 3.5rem;
+    display: flex;
+    align-items: center;
+}
+
+@media (min-width: 641px) {
+    .page {
+        flex-direction: row;
+    }
+
+    /* [關鍵] 側邊欄縮放動畫 */
+    .sidebar {
+        width: 70px;
+        height: 100vh;
+        position: sticky;
+        top: 0;
+        transition: width 0.2s ease-in-out;
+        overflow-x: hidden;
+        z-index: 1000;
+    }
+
+        .sidebar:hover {
+            width: 250px;
+        }
+
+        /* [關鍵] 使用 ::deep 穿透到 Menu 元件，隱藏文字 */
+        /* 這裡必須與原始 MainLayout 邏輯一致 */
+        /* 調整選擇器邏輯以匹配 NavMenu 的結構，確保文字能正確隱藏 */
+        .sidebar:not(:hover) ::deep .nav-link span,
+        .sidebar:not(:hover) ::deep .navbar-brand > span {
+            display: none;
+        }
+
+        /* 收合時內容置中 */
+        .sidebar:not(:hover) ::deep .nav-link,
+        .sidebar:not(:hover) ::deep .navbar-brand {
+            justify-content: center;
+        }
+
+        /* 收合時移除圖示邊距 */
+        .sidebar:not(:hover) ::deep .nav-icon {
+            margin-right: 0 !important;
+        }
+}

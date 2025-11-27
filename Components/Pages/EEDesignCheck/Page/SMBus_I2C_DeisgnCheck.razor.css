@@ -1,0 +1,143 @@
+﻿/* 設定 Tab 導航連結的游標樣式，確保滑鼠移上去時顯示手型 */
+.nav-link {
+    cursor: pointer;
+    color: #495057; /* 預設文字顏色 */
+}
+
+    /* 讓被選取的 Tab 呈現更明顯的標題色 */
+    .nav-link.active {
+        font-weight: bold;
+        color: #0d6efd; /* Bootstrap Primary Color */
+        border-bottom-color: transparent;
+    }
+
+/* 讓表格內容垂直置中，這樣 Badge 與文字會對齊得比較好看 */
+.table td, .table th {
+    vertical-align: middle;
+}
+
+/* 針對狀態 Badge 增加微小的陰影，讓除錯時的紅綠燈號更突出 */
+.badge {
+    font-size: 0.9em;
+    padding: 0.5em 0.7em;
+}
+
+    .badge.bg-danger {
+        box-shadow: 0 0 4px rgba(220, 53, 69, 0.4);
+    }
+
+/* 調整卡片標題區域的背景，區分不同 Bus */
+.card-header.bg-light {
+    background-color: #f8f9fa !important;
+    border-bottom: 1px solid #dee2e6;
+}
+
+/* 定義裝置方塊的最小寬度，避免內容擠在一起 */
+.col-md-4 .border {
+    min-height: 80px; /* 確保高度一致 */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    transition: transform 0.2s;
+}
+
+    /* 滑鼠懸停在裝置方塊時的微互動效果 */
+    .col-md-4 .border:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+
+/* 上傳區域的虛線邊框樣式 */
+.border-dashed {
+    border-style: dashed !important;
+    background-color: #f8f9fa;
+    transition: background-color 0.3s;
+}
+
+    /* 當滑鼠移入上傳區域時的變色效果 */
+    .border-dashed:hover {
+        background-color: #e9ecef;
+    }
+
+/* 設定 Diagram 畫布區域 */
+::deep .diagram-canvas {
+    overflow: visible; /* 允許內容超出 */
+}
+
+/* 設定 Node (節點) 的外觀 */
+::deep .diagram-node {
+    display: flex;
+    flex-direction: column;
+    background-color: #ffffff;
+    border: 2px solid #0d6efd; /* Bootstrap Primary Color */
+    border-radius: 8px; /* 圓角 */
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* 陰影 */
+    min-width: 100px;
+    min-height: 50px;
+    padding: 0;
+    position: absolute; /* 必要設定，確保定位正確 */
+    /* [新增] 讓節點內部的元素 (文字/內容) 在水平與垂直方向都置中 */
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+}
+
+    /* 當節點被選取時的樣式 */
+    ::deep .diagram-node.selected {
+        border-color: #198754; /* 綠色 */
+        box-shadow: 0 0 0 3px rgba(25, 135, 84, 0.3);
+    }
+
+/* 設定 Node 內部的標題 */
+::deep .diagram-node-content {
+    padding: 10px;
+    text-align: center;
+    font-weight: bold;
+    color: #333;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    width: 100%;
+}
+
+/* 設定 Port (連接點) 的外觀 */
+::deep .port {
+    width: 12px;
+    height: 12px;
+    background-color: #dc3545; /* 紅色連接點 */
+    border-radius: 50%;
+    cursor: crosshair;
+    border: 1px solid white;
+    z-index: 10; /* 確保在節點上方 */
+}
+
+    /* 當滑鼠移過 Port 時 */
+    ::deep .port:hover {
+        background-color: #bb2d3b;
+        transform: scale(1.2);
+    }
+
+/* 設定 Link (連線) 的外觀 */
+/* 注意：Link 通常是 SVG Path，必須設定 stroke */
+::deep .diagram-link {
+    stroke: #6c757d; /* 灰色線條 */
+    stroke-width: 2px;
+    fill: none; /* 避免路徑封閉填充 */
+    cursor: pointer;
+}
+
+    /* 當連線被選取時 */
+    ::deep .diagram-link.selected {
+        stroke: #0d6efd; /* 藍色 */
+        stroke-width: 3px;
+    }
+
+/* 設定 Link 的箭頭 (Marker) */
+/* 這裡必須設定 fill 屬性，否則箭頭會是透明的看不到 */
+::deep .diagram-link-marker {
+    fill: #6c757d; /* 與線條顏色一致 */
+    stroke: none; /* 箭頭本身通常不需要邊框，只需填色 */
+    opacity: 1; /* 確保不透明 */
+}
+

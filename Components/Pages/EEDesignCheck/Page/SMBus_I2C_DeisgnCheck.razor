@@ -1,0 +1,878 @@
+﻿@page "/ee-design-check-tool/smbus-i2c-design-check"
+@layout HWDPortalMaui.Components.Pages.EEDesignCheck.Layout.MainLayout_EEDesignTool
+@* 引入 IO 與 Diagnostics 以支援檔案操作與外部程序呼叫 *@
+@using System.IO
+@using System.Diagnostics
+@using System.Text
+@using System.Text.RegularExpressions
+@* 引入 Blazor.Diagrams 命名空間 *@
+@using Blazor.Diagrams
+@using Blazor.Diagrams.Core.Geometry
+@using Blazor.Diagrams.Core.Models
+@using Blazor.Diagrams.Components
+
+<PageTitle>SMBus/I2C Design Check Tool</PageTitle>
+
+
+<h1>SMBus/I2C Design Check Tool</h1>
+@* 頁面主要容器與 Tab 導航 *@
+<div class="container-fluid mt-3">
+
+    @* Tab 導航列 *@
+    <div class="card text-center">
+        <div class="card-header">
+            <ul class="nav nav-tabs card-header-tabs">
+                <li class="nav-item">
+                    <a class="nav-link @(activeTab == 0 ? "active" : "")" @onclick="() => activeTab = 0" href="javascript:void(0)">
+                        <i class="bi bi-file-earmark-arrow-up"></i> 線路圖上傳 (DSN Input)
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link @(activeTab == 1 ? "active" : "")" @onclick="() => activeTab = 1" href="javascript:void(0)">
+                        拓撲結構與連接性 (Items 1, 6)
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link @(activeTab == 2 ? "active" : "")" @onclick="() => activeTab = 2" href="javascript:void(0)">
+                        位準轉換電路檢查 (Items 2, 3, 4)
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link @(activeTab == 3 ? "active" : "")" @onclick="() => activeTab = 3" href="javascript:void(0)">
+                        通訊協定與配置 (Items 5, 7)
+                    </a>
+                </li>
+            </ul>
+        </div>
+
+        <div class="card-body text-start">
+
+            @* Tab 0 內容: 檔案上傳與分析啟動 *@
+            @if (activeTab == 0)
+            {
+                <h5 class="card-title">上傳 OrCAD DSN 線路圖檔案</h5>
+                <p class="card-text text-muted">請上傳專案的 .dsn 檔案以進行 I2C/SMBus 自動化檢查。</p>
+
+                <div class="row justify-content-center mt-4 mb-4">
+                    <div class="col-md-8">
+                        <div class="card shadow-sm">
+                            <div class="card-body text-center p-5 border border-2 border-dashed rounded">
+                                <i class="bi bi-cloud-upload fs-1 text-primary mb-3"></i>
+
+                                <div class="mb-3">
+                                    <InputFile OnChange="HandleFileSelected" class="form-control" accept=".dsn, .net" />
+                                </div>
+
+                                @if (uploadedFile != null)
+                                {
+                                    <div class="alert alert-success d-inline-block mt-2">
+                                        <i class="bi bi-file-earmark-check"></i> 已選擇檔案: <strong>@uploadedFile.Name</strong> (@(uploadedFile.Size / 1024) KB)
+                                    </div>
+                                    <div class="mt-3">
+                                        <button class="btn btn-primary btn-lg" @onclick="StartAnalysis" disabled="@isAnalyzing">
+                                            @if (isAnalyzing)
+                                            {
+                                                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                                <span> 分析中...</span>
+                                            }
+                                            else
+                                            {
+                                                <span><i class="bi bi-play-circle"></i> 開始分析線路</span>
+                                            }
+                                        </button>
+                                    </div>
+                                }
+
+                                @if (!string.IsNullOrEmpty(analysisMessage))
+                                {
+                                    <div class="mt-3 text-muted">
+                                        <small>@analysisMessage</small>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            @* Tab 1 內容: 拓撲結構 *@
+            else if (activeTab == 1)
+            {
+                <h5 class="card-title">SMBUS/I2C 拓撲結構總覽</h5>
+                <p class="card-text text-muted">檢視從 CPU/PCH/EC 到 Sink 端的完整路徑，以及 SMBUS Alert Pin 連接狀態。</p>
+
+                <div class="card mb-4 border-primary">
+                    <div class="card-header bg-primary text-white">
+                        <i class="bi bi-gear-fill"></i> 主要控制器元件設定 (Key Component References)
+                    </div>
+                    <div class="card-body bg-light">
+                        <div class="row g-3">
+                            @* CPU 輸入框 *@
+                            <div class="col-md-4">
+                                <label for="inputCPU" class="form-label fw-bold">CPU Ref Des:</label>
+                                <input type="text" class="form-control" id="inputCPU" @bind="CpuRef" placeholder="Ex: UC1" />
+                                <div class="form-text">輸入 CPU 在線路圖上的位置號 (如 UC1)</div>
+                            </div>
+                            @* PCH 輸入框 *@
+                            <div class="col-md-4">
+                                <label for="inputPCH" class="form-label fw-bold">PCH Ref Des:</label>
+                                <input type="text" class="form-control" id="inputPCH" @bind="PchRef" placeholder="Ex: PCH1" />
+                                <div class="form-text">輸入 PCH 在線路圖上的位置號 (如 PCH1)</div>
+                            </div>
+                            @* EC 輸入框 *@
+                            <div class="col-md-4">
+                                <label for="inputEC" class="form-label fw-bold">EC Ref Des:</label>
+                                <input type="text" class="form-control" id="inputEC" @bind="EcRef" placeholder="Ex: UE1" />
+                                <div class="form-text">輸入 EC 在線路圖上的位置號 (如 UE1)</div>
+                            </div>
+
+                            @* 啟動按鈕置於 Group 內右下方 *@
+                            <div class="col-12 text-end mt-3">
+                                <button class="btn btn-success" @onclick="RunTopologyCheck">
+                                    <i class="bi bi-diagram-2-fill"></i> 啟動拓撲結構檢查
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                @* 只有在圖表準備好時才顯示 DiagramCanvas *@
+                @if (isDiagramReady && MyDiagram != null)
+                {
+                    <div class="card shadow-sm">
+                        @* 加入 d-flex justify-content-between align-items-center 以便左右對齊 *@
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-diagram-3"></i> 拓撲圖預覽</span>
+
+                            @* [新增] 縮放工具列按鈕 *@
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-secondary" @onclick="ZoomIn" title="放大">
+                                    <i class="bi bi-zoom-in"></i>
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" @onclick="ZoomOut" title="縮小">
+                                    <i class="bi bi-zoom-out"></i>
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" @onclick="ZoomReset" title="重置 100%">
+                                    <i class="bi bi-arrow-counterclockwise"></i> 重置
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" @onclick="ZoomToFit" title="適應視窗">
+                                    <i class="bi bi-arrows-fullscreen"></i> 適應
+                                </button>
+                            </div>
+                        </div>
+
+                        @* overflow 改為 hidden，並加入 position-relative *@
+                        <div class="card-body position-relative" style="height: 600px; overflow: hidden; background-color: #f8f9fa;">
+                            <CascadingValue Value="MyDiagram">
+                                <DiagramCanvas />
+                            </CascadingValue>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="card shadow-sm">
+                        <div class="card-body text-center p-5">
+                            <i class="bi bi-info-circle text-muted" style="font-size: 3rem;"></i>
+                            <p class="mt-3 text-muted">請點擊上方「啟動拓撲結構檢查」按鈕以產生拓撲圖</p>
+                        </div>
+                    </div>
+                }
+
+                @* 分析訊息顯示 *@
+                @if (!string.IsNullOrEmpty(analysisMessage))
+                {
+                    <div class="alert alert-info mt-3">
+                        <i class="bi bi-info-circle"></i> @analysisMessage
+                    </div>
+                }
+
+            }
+
+            @* Tab 2 內容: Level Shifter 綜合檢查 (最核心的電路檢查) *@
+            else if (activeTab == 2)
+            {
+                <h5 class="card-title">位準轉換器 (Level Shifter) 電氣特性檢查</h5>
+                <p class="text-muted">整合檢查：上拉電阻 (PU)、MOSFET Vgs 閾值與電源軌電壓。</p>
+
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>位置 (Location)</th>
+                                <th>網路名稱 (Net Name)</th>
+                                <th>電源軌檢查 (Item 4)</th>
+                                <th>上拉電阻檢查 (Item 2)</th>
+                                <th>MOSFET Vgs 檢查 (Item 3)</th>
+                                <th>綜合判定</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in levelShifterResults)
+                            {
+                                <tr>
+                                    <td><strong>@item.ComponentRef</strong></td>
+                                    <td>@item.NetName</td>
+                                    <td>
+                                        <div>@item.PowerRail</div>
+                                        <span class="badge @GetBadgeClass(item.PowerRailStatus)">@item.PowerRailStatus</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge @GetBadgeClass(item.PullUpStatus)">@item.PullUpStatus</span>
+                                        @if (!string.IsNullOrEmpty(item.PullUpMessage))
+                                        {
+                                            <div class="small text-muted">@item.PullUpMessage</div>
+                                        }
+                                    </td>
+                                    <td>
+                                        <div class="small">Design: @item.DesignVgs V</div>
+                                        <div class="small">Th: @item.ThresholdVgs V</div>
+                                        <span class="badge @GetBadgeClass(item.VgsStatus)">@item.VgsStatus</span>
+                                    </td>
+                                    <td>
+                                        @if (item.IsOverallFail)
+                                        {
+                                            <span class="text-danger fw-bold"><i class="bi bi-x-circle-fill"></i> FAIL</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-success fw-bold"><i class="bi bi-check-circle-fill"></i> PASS</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+            @* Tab 3 內容: 協定與配置 *@
+            else if (activeTab == 3)
+            {
+                <h5 class="card-title">I2C 地址衝突與匯流排速度檢查</h5>
+                <p class="text-muted">檢視同一 Bus 上的裝置地址是否重複，並確認速度設定一致性。</p>
+
+                @foreach (var bus in busConfigResults)
+                {
+                    <div class="card mb-3 border-secondary">
+                        <div class="card-header d-flex justify-content-between align-items-center bg-light">
+                            <h6 class="mb-0 fw-bold"><i class="bi bi-hdd-network"></i> Bus: @bus.BusName</h6>
+                            <div>
+                                <span class="me-2">Item #7 Speed Check:</span>
+                                <span class="badge @GetBadgeClass(bus.SpeedStatus)">@bus.SpeedStatus</span>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                @foreach (var dev in bus.Devices)
+                                {
+                                    <div class="col-md-4 mb-2">
+                                        <div class="p-2 border rounded @(dev.AddressStatus == CheckStatus.Fail ? "border-danger bg-danger-subtle" : "border-success")">
+                                            <strong>@dev.DeviceName</strong>
+                                            <div class="d-flex justify-content-between">
+                                                <span>Addr: @dev.AddressHex</span>
+                                                @if (dev.AddressStatus == CheckStatus.Fail)
+                                                {
+                                                    <span class="badge bg-danger">Conflict</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-success">OK</span>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    // 預設改為 0，讓程式啟動時先顯示上傳頁面，引導使用者操作
+    private int activeTab = 0;
+
+    // 檔案上傳相關變數
+    private IBrowserFile? uploadedFile;
+    private bool isAnalyzing = false;
+    private string analysisMessage = string.Empty;
+
+    // 圖表準備狀態旗標
+    private bool isDiagramReady = false;
+
+    // 檢查狀態列舉
+    public enum CheckStatus { Pass, Fail, Warning, Unknown }
+
+    // 儲存解析後的 NetList 資料 ContentNetListArray[N] 的 範例內容為 [2][0] = NET_NAME("+0.9V_TBT_B_SVR"), [2][1] = Location ^ Pin ("RT176^1"), ... [2][X-1] = Location ^ Pin ("CT77^1"), 共有X-1個元件 在NET_NAME[0]上面
+    private List<List<string>> ContentNetListArray = new List<List<string>>();
+
+    // 預設值可依據專案習慣設定，或留空
+    private string CpuRef { get; set; } = "UC1";
+    private string PchRef { get; set; } = "";
+    private string EcRef { get; set; } = "UE1";
+
+    // 定義 OrCAD 轉檔相關路徑 (建議之後可移至設定檔)
+    private const string TempFolderPath = @"C:\powertooltemp";
+    private const string OrCADScriptSourcePath = @"\\tpea31hwdfs01\Automation\自動化安裝軟體\OrCAD_Script\CreateNetList_24.1";
+    private const string CaptureExePath = @"C:\Cadence\SPB_24.1\tools\bin\Capture.exe";
+
+    // 定義 BlazorDiagram 物件 - 改為可空類型，延遲初始化
+    private BlazorDiagram? MyDiagram { get; set; }
+
+    // 處理檔案選擇事件
+    private void HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        // 限制最大檔案大小 (例如 50MB)
+        long maxFileSize = 1024 * 1024 * 50;
+        uploadedFile = e.File;
+        analysisMessage = "檔案已準備就緒，請點擊「開始分析」。";
+    }
+    // 拓撲圖縮放控制方法
+    private void ZoomIn()
+    {
+        if (MyDiagram != null)
+        {
+            // 每次放大 20%
+            MyDiagram.SetZoom(MyDiagram.Zoom + 0.2);
+        }
+    }
+
+    private void ZoomOut()
+    {
+        if (MyDiagram != null)
+        {
+            // 每次縮小 20%，設定下限避免過小
+            var newZoom = MyDiagram.Zoom - 0.2;
+            if (newZoom < 0.1) newZoom = 0.1;
+            MyDiagram.SetZoom(newZoom);
+        }
+    }
+
+    private void ZoomReset()
+    {
+        if (MyDiagram != null)
+        {
+            // 重置縮放為 1.0 (100%) 並歸零位移
+            MyDiagram.SetZoom(1.0);
+            MyDiagram.SetPan(0, 0);
+        }
+    }
+
+    private void ZoomToFit()
+    {
+        if (MyDiagram != null)
+        {
+            // 自動縮放以適應所有節點
+            MyDiagram.ZoomToFit();
+        }
+    }
+    // 模擬開始分析流程
+    private async Task StartAnalysis()
+    {
+        if (uploadedFile == null) return;
+
+        isAnalyzing = true;
+        analysisMessage = "初始化環境中...";
+        StateHasChanged();
+
+        try
+        {
+            // 步驟 1: 建立暫存資料夾
+            CreatePowerToolTempFolder(TempFolderPath);
+
+            // 步驟 2: 判斷副檔名並決定儲存檔名
+            // Form1 邏輯：DSN 需命名為 0.DSN 以配合 Script; NET 檔則依原名或直接存入
+            string extension = Path.GetExtension(uploadedFile.Name).ToLower();
+            string tempFileName = (extension == ".dsn") ? "0.DSN" : uploadedFile.Name;
+            string fullPath = Path.Combine(TempFolderPath, tempFileName);
+
+            // 限制讀取大小 (50MB)
+            long maxFileSize = 1024 * 1024 * 50;
+
+            analysisMessage = $"正在儲存檔案至 {fullPath}...";
+            StateHasChanged();
+
+            // 將檔案寫入本機暫存區
+            await using (var fileStream = new FileStream(fullPath, FileMode.Create))
+            {
+                await uploadedFile.OpenReadStream(maxFileSize).CopyToAsync(fileStream);
+            }
+
+            // 步驟 3: 依照檔案類型執行對應邏輯
+            if (extension == ".dsn")
+            {
+                // [Case A] DSN 檔案：需呼叫外部 EXE 轉成 Netlist
+                analysisMessage = "正在呼叫 OrCAD Capture 產生 Netlist...";
+                StateHasChanged();
+
+                // 為了避免卡住 UI，使用 Task.Run 執行耗時的 Process 呼叫
+                await Task.Run(() => ReadNetList_DSN(fullPath));
+
+                // 轉檔完成後，Script 預設會產生 "0.NET" 於同目錄
+                string generatedNetlistPath = Path.Combine(TempFolderPath, "0.NET");
+
+                if (File.Exists(generatedNetlistPath))
+                {
+                    analysisMessage = "正在讀取生成的 Netlist...";
+                    StateHasChanged();
+                    // 讀取生成的 .NET 檔並存入 ContentNetListArray
+                    ReadNetList_NET(generatedNetlistPath);
+                }
+                else
+                {
+                    throw new FileNotFoundException("OrCAD 轉檔失敗，未產生 0.NET 檔案。");
+                }
+            }
+            else if (extension == ".net")
+            {
+                // [Case B] NET 檔案：直接讀取使用者上傳的檔案
+                // 若使用者選取NET File, 則直接接續這步驟
+                analysisMessage = "偵測到 Netlist 檔案，正在直接解析...";
+                StateHasChanged();
+
+                // 直接讀取並存入 ContentNetListArray
+                ReadNetList_NET(fullPath);
+            }
+            else
+            {
+                throw new NotSupportedException($"不支援的檔案格式: {extension}。僅支援 .DSN, .NET");
+            }
+
+            activeTab = 1; // 切換到結果分頁
+            analysisMessage = $"分析完成！共解析出 {ContentNetListArray.Count} 組 Net 資料。";
+        }
+        catch (Exception ex)
+        {
+            analysisMessage = $"錯誤: {ex.Message}";
+            // 建議紀錄 Log: ex.StackTrace
+        }
+        finally
+        {
+            isAnalyzing = false;
+            // 開發階段建議保留暫存檔以便除錯，正式發布可取消註解下方清除指令
+            // CreatePowerToolTempFolder(TempFolderPath);
+        }
+    }
+
+    // 資料模型：Level Shifter 檢查結果
+    public class LevelShifterCheckResult
+    {
+        public string ComponentRef { get; set; } = string.Empty;
+        public string NetName { get; set; } = string.Empty;
+
+        // Item 4
+        public string PowerRail { get; set; } = string.Empty;
+        public CheckStatus PowerRailStatus { get; set; }
+
+        // Item 2
+        public CheckStatus PullUpStatus { get; set; }
+        public string PullUpMessage { get; set; } = string.Empty;
+
+        // Item 3
+        public double ThresholdVgs { get; set; }
+        public double DesignVgs { get; set; }
+        public CheckStatus VgsStatus { get; set; }
+
+        // 判斷是否整體失敗
+        public bool IsOverallFail => PowerRailStatus == CheckStatus.Fail || PullUpStatus == CheckStatus.Fail || VgsStatus == CheckStatus.Fail;
+    }
+    private void RunTopologyCheck()
+    {
+        try
+        {
+            // 強制重置圖表狀態
+            isDiagramReady = false;
+            StateHasChanged(); // [修改] 這裡不需要 await，因為是 void 方法，但在 Blazor Server/Hybrid 通常沒問題
+
+            analysisMessage = $"正在執行拓撲檢查... 目標元件: CPU[{CpuRef}], PCH[{PchRef}], EC[{EcRef}]";
+
+            // 重新初始化
+            MyDiagram = new BlazorDiagram();
+
+            // [修改] 維持使用 NormalRouter (貝茲曲線)，配合 Port 會有很好的 S 型效果
+            MyDiagram.Options.Links.DefaultRouter = new Blazor.Diagrams.Core.Routers.NormalRouter();
+
+            // [新增] 設定路徑生成器為 SmoothPathGenerator (讓轉折更圓滑) - 選用，通常 Router 就夠了
+            // MyDiagram.Options.Links.DefaultPathGenerator = new Blazor.Diagrams.Core.PathGenerators.SmoothPathGenerator();
+
+            MyDiagram.Options.Zoom.Enabled = true;
+            MyDiagram.Options.AllowMultiSelection = false;
+
+            // [修改] 大幅增加 X 軸距離 (400 -> 600) 以拉平曲線，增加文字空間
+            int nodeX = 600;
+            int nodeY = 50;
+            // [修改] 增加垂直間距 (120 -> 100~150)，視元件數量而定，這裡設 130
+            int nodeYGap = 130;
+
+            // 建立 CPU 節點
+            var cpuNode = new NodeModel(position: new Point(50, 300))
+            {
+                Title = string.IsNullOrEmpty(CpuRef) ? "CPU" : CpuRef,
+                Locked = true
+            };
+
+            // [新增] 為 CPU 增加一個「右側」的連接埠 (Port)
+            // 這樣所有線條都會強制從右邊水平射出，解決箭頭亂指的問題
+            var cpuPort = cpuNode.AddPort(PortAlignment.Right);
+
+            MyDiagram.Nodes.Add(cpuNode);
+
+            // 核心邏輯：遍歷 NetList 尋找 SMBCLK 相關連線
+            for (int i = 0; i < ContentNetListArray.Count; i++)
+            {
+                string netName = ContentNetListArray[i][0].ToString();
+
+                if (netName.IndexOf("SMBCLK", StringComparison.OrdinalIgnoreCase) > -1)
+                {
+                    bool isCpuInThisNet = false;
+                    string targetCpuRef = string.IsNullOrEmpty(CpuRef) ? "CPU" : CpuRef;
+
+                    // 檢查是否包含 CPU (這段邏輯保持不變)
+                    for (int checkIdx = 1; checkIdx < ContentNetListArray[i].Count; checkIdx++)
+                    {
+                        string pinData = ContentNetListArray[i][checkIdx].ToString();
+                        string componentRef = pinData.Split('^')[0];
+
+                        if (componentRef.Equals(targetCpuRef, StringComparison.OrdinalIgnoreCase))
+                        {
+                            isCpuInThisNet = true;
+                            break;
+                        }
+                    }
+
+                    if (isCpuInThisNet)
+                    {
+                        for (int k = 1; k < ContentNetListArray[i].Count; k++)
+                        {
+                            string rawPinData = ContentNetListArray[i][k].ToString();
+                            string currentRefDes = rawPinData.Split('^')[0];
+
+                            if (currentRefDes.Equals(targetCpuRef, StringComparison.OrdinalIgnoreCase))
+                            {
+                                continue;
+                            }
+
+                            var existingNode = MyDiagram.Nodes.FirstOrDefault(n => n.Title == currentRefDes);
+                            NodeModel targetNode;
+
+                            // [新增] 定義目標 Port 變數
+                            PortModel targetPort;
+
+                            if (existingNode == null)
+                            {
+                                targetNode = new NodeModel(position: new Point(nodeX, nodeY))
+                                {
+                                    Title = currentRefDes,
+                                    Locked = true
+                                };
+
+                                // [新增] 為目標元件增加一個「左側」的連接埠
+                                // 這樣線條會水平進入元件左側正中央
+                                targetPort = targetNode.AddPort(PortAlignment.Left);
+
+                                MyDiagram.Nodes.Add(targetNode);
+                                nodeY += nodeYGap;
+                            }
+                            else
+                            {
+                                targetNode = existingNode;
+                                // [新增] 如果節點已存在，嘗試取得現有的左側 Port，沒有就新增
+                                targetPort = targetNode.Ports.FirstOrDefault(p => p.Alignment == PortAlignment.Left)
+                                             ?? targetNode.AddPort(PortAlignment.Left);
+                            }
+
+                            // [修改] 建立連線：改為連接 Port (cpuPort -> targetPort) 而非 Node -> Node
+                            // 這能確保線條的起始與結束角度都是水平的
+                            var link = new LinkModel(cpuPort, targetPort);
+                            link.TargetMarker = LinkMarker.Arrow;
+                            link.Color = "#6c757d";
+
+                            // [修改] 設定標籤位置
+                            // 由於使用了 Port 與較寬的 X 距離，S 型曲線的中段 (0.5) 或後段 (0.7) 空間會變大
+                            var linkLabel = new Blazor.Diagrams.Core.Models.LinkLabelModel(link, netName)
+                            {
+                                Distance = 0.65, // [修改] 設在 65% 處，配合 S 型曲線，通常這裡是線條分開最明顯的地方
+                                Offset = new Point(0, -15) // [修改] 稍微往上抬一點，避免壓線
+                            };
+
+                            link.Labels.Add(linkLabel);
+                            MyDiagram.Links.Add(link);
+                        }
+                    }
+                }
+            }
+
+            isDiagramReady = true;
+            analysisMessage = $"拓撲檢查完成！已產生 {MyDiagram.Nodes.Count} 個節點，{MyDiagram.Links.Count} 條連線。";
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            analysisMessage = $"拓撲檢查錯誤: {ex.Message}\n{ex.StackTrace}";
+            isDiagramReady = false;
+            MyDiagram = null;
+            StateHasChanged();
+        }
+    }
+
+    // 資料模型：Bus 配置與地址檢查
+    public class BusConfigurationResult
+    {
+        public string BusName { get; set; } = string.Empty;
+        public List<DeviceConfig> Devices { get; set; } = new();
+        public CheckStatus SpeedStatus { get; set; } // Item 7
+    }
+
+    public class DeviceConfig
+    {
+        public string DeviceName { get; set; } = string.Empty;
+        public string AddressHex { get; set; } = string.Empty;
+        public CheckStatus AddressStatus { get; set; } // Item 5
+    }
+
+    // 模擬資料容器
+    private List<LevelShifterCheckResult> levelShifterResults = new();
+    private List<BusConfigurationResult> busConfigResults = new();
+
+    protected override void OnInitialized()
+    {
+        // 初始化模擬資料 (對應 PPT 範例)
+        LoadDummyData();
+    }
+
+    private void LoadDummyData()
+    {
+        // 模擬 Item 2, 3, 4 的資料
+        levelShifterResults = new List<LevelShifterCheckResult>
+        {
+            new LevelShifterCheckResult
+            {
+                ComponentRef = "Q1802",
+                NetName = "PCH_SML_SCL_PD",
+                PowerRail = "+1P8V_S5",
+                PowerRailStatus = CheckStatus.Pass,
+                PullUpStatus = CheckStatus.Pass,
+                DesignVgs = 1.8,
+                ThresholdVgs = 1.1,
+                VgsStatus = CheckStatus.Pass
+            },
+            new LevelShifterCheckResult
+            {
+                ComponentRef = "Q1703",
+                NetName = "HDMI1_SCL_SNK",
+                PowerRail = "Unknown", // 模擬 PPT 中無法判斷 Power Rail 的情況
+                PowerRailStatus = CheckStatus.Fail,
+                PullUpStatus = CheckStatus.Warning,
+                PullUpMessage = "Manual Check Required",
+                DesignVgs = 0,
+                ThresholdVgs = 1.1,
+                VgsStatus = CheckStatus.Fail
+            }
+        };
+
+        // 模擬 Item 5, 7 的資料
+        busConfigResults = new List<BusConfigurationResult>
+        {
+            new BusConfigurationResult
+            {
+                BusName = "SMBCLK/SMBDATA",
+                SpeedStatus = CheckStatus.Pass,
+                Devices = new List<DeviceConfig>
+                {
+                    new DeviceConfig { DeviceName = "DM1", AddressHex = "0x50", AddressStatus = CheckStatus.Fail }, // 重複地址
+                    new DeviceConfig { DeviceName = "DM2", AddressHex = "0x50", AddressStatus = CheckStatus.Fail }, // 重複地址
+                    new DeviceConfig { DeviceName = "DX1", AddressHex = "0x60", AddressStatus = CheckStatus.Pass }
+                }
+            },
+            new BusConfigurationResult
+            {
+                BusName = "DDP1_CTRL",
+                SpeedStatus = CheckStatus.Pass,
+                Devices = new List<DeviceConfig>
+                {
+                    new DeviceConfig { DeviceName = "DP1", AddressHex = "0x3A", AddressStatus = CheckStatus.Pass },
+                    new DeviceConfig { DeviceName = "HDMI1", AddressHex = "0x40", AddressStatus = CheckStatus.Pass }
+                }
+            }
+        };
+    }
+
+    // 輔助方法：取得 Badge 樣式
+    private string GetBadgeClass(CheckStatus status) => status switch
+    {
+        CheckStatus.Pass => "bg-success",
+        CheckStatus.Fail => "bg-danger",
+        CheckStatus.Warning => "bg-warning text-dark",
+        _ => "bg-secondary"
+    };
+    // 讀取並處理 DSN 檔案 (移植自 Form1.cs)
+    private void ReadNetList_DSN(string _DSNfile)
+    {
+        // 定義 CMD Command
+        // 注意：路徑中的斜線方向需符合 TCL 語法，這裡維持 Form1 的寫法
+        string tclScriptPath = $"{TempFolderPath}/start-create-netlist.tcl".Replace("\\", "/");
+        string CMD_Command = $@"{CaptureExePath} -batch -tcl ""{tclScriptPath}""";
+
+        try
+        {
+            // 複製 Script File (從網芳或其他來源)
+            // 注意：需確保執行此 App 的電腦有權限存取 OrCADScriptSourcePath
+            if (!CopyDirectory(OrCADScriptSourcePath, TempFolderPath, true))
+            {
+                throw new Exception($"無法複製 Script 檔案，來源: {OrCADScriptSourcePath}");
+            }
+
+            // 執行 CMD
+            RunScriptUsingCMD(CMD_Command);
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"ReadNetList_DSN 執行失敗: {ex.Message}");
+        }
+    }
+
+    // 執行 CMD 指令 (移植自 Form1.cs)
+    private void RunScriptUsingCMD(string cmdCommand)
+    {
+        using (Process process = new Process())
+        {
+            process.StartInfo.FileName = "cmd.exe";
+            process.StartInfo.Arguments = $"/c {cmdCommand}";
+            process.StartInfo.UseShellExecute = false;
+            process.StartInfo.RedirectStandardOutput = true;
+            process.StartInfo.RedirectStandardError = true;
+            process.StartInfo.CreateNoWindow = true;
+
+            process.Start();
+
+            string output = process.StandardOutput.ReadToEnd();
+            string error = process.StandardError.ReadToEnd();
+
+            process.WaitForExit();
+
+            // Form1.cs 中如果 error 不為空則拋出異常，這在 OrCAD 輸出警告時可能會導致中斷
+            // 建議根據實際情況決定是否要 throw
+            if (!string.IsNullOrEmpty(error) && process.ExitCode != 0)
+            {
+                throw new Exception($"CMD 執行錯誤: {error}");
+            }
+        }
+    }
+
+    // 讀取 NET 檔案內容 (移植自 Form1.cs)
+    private void ReadNetList_NET(string _filePath)
+    {
+        try
+        {
+            string fileContent = File.ReadAllText(_filePath);
+            ParseFileTo2DArray(fileContent);
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"讀取 NET 檔案失敗: {ex.Message}");
+        }
+    }
+
+    // 解析 NetList 字串至 List (移植自 Form1.cs)
+    private void ParseFileTo2DArray(string _fileContent)
+    {
+        // 清除之前的內容
+        ContentNetListArray.Clear();
+
+        var lines = _fileContent.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+        List<string>? currentNet = null;
+
+        foreach (var line in lines)
+        {
+            var trimmedLine = line.Trim();
+            if (trimmedLine.StartsWith("(net "))
+            {
+                if (currentNet != null)
+                {
+                    ContentNetListArray.Add(currentNet);
+                }
+
+                currentNet = new List<string>
+                {
+                    // 提取網路名稱 (net "NAME") -> NAME
+                    trimmedLine.Substring(6, trimmedLine.Length - 7).Trim()
+                };
+            }
+            else if (trimmedLine.StartsWith("(node") && currentNet != null)
+            {
+                var parts = trimmedLine.Split('"');
+                if (parts.Length > 3)
+                {
+                    currentNet.Add(parts[1] + "^" + parts[3]);
+                }
+            }
+        }
+
+        // 將最後一組加入
+        if (currentNet != null)
+        {
+            ContentNetListArray.Add(currentNet);
+        }
+    }
+
+    // 資料夾複製工具 (移植自 Form1.cs)
+    private bool CopyDirectory(string sourcePath, string destinationPath, bool overwriteExisting)
+    {
+        bool ret = false;
+        try
+        {
+            sourcePath = sourcePath.EndsWith(@"\") ? sourcePath : sourcePath + @"\";
+            destinationPath = destinationPath.EndsWith(@"\") ? destinationPath : destinationPath + @"\";
+
+            if (Directory.Exists(sourcePath))
+            {
+                if (!Directory.Exists(destinationPath))
+                    Directory.CreateDirectory(destinationPath);
+
+                foreach (string fls in Directory.GetFiles(sourcePath))
+                {
+                    FileInfo flinfo = new FileInfo(fls);
+                    flinfo.CopyTo(destinationPath + flinfo.Name, overwriteExisting);
+                }
+
+                foreach (string drs in Directory.GetDirectories(sourcePath))
+                {
+                    DirectoryInfo drinfo = new DirectoryInfo(drs);
+                    if (!CopyDirectory(drs, destinationPath + drinfo.Name, overwriteExisting))
+                        ret = false;
+                }
+            }
+            ret = true;
+        }
+        catch
+        {
+            ret = false;
+        }
+        return ret;
+    }
+
+    // 建立/清空暫存資料夾 (移植自 Form1.cs)
+    private void CreatePowerToolTempFolder(string directoryPath)
+    {
+        try
+        {
+            if (Directory.Exists(directoryPath))
+            {
+                string[] files = Directory.GetFiles(directoryPath);
+                foreach (string file in files)
+                {
+                    try { File.Delete(file); } catch { }
+                }
+            }
+            else
+            {
+                Directory.CreateDirectory(directoryPath);
+            }
+        }
+        catch { }
+    }
+}

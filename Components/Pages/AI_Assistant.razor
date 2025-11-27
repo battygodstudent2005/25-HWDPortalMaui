@@ -5,7 +5,7 @@
 
 <div class="ai-assistant-container">
     <div id="chat-history" class="chat-history">
-        @* [修改] 所有資料來源都改為 _aiAssistantService *@
+        @* 所有資料來源都改為 _aiAssistantService *@
         @foreach (var message in _aiAssistantService.ChatMessages)
         {
             <div class="chat-message @(message.Author == "User" ? "user-message" : "ai-message")">
@@ -42,7 +42,7 @@
 
     <div class="chat-input-area">
         <div class="button-group-top">
-            @* [修改] 所有事件和狀態都綁定到 _aiAssistantService *@
+            @* 所有事件和狀態都綁定到 _aiAssistantService *@
             <button class="btn-new-chat" @onclick="_aiAssistantService.StartNewChatAsync" disabled="@(_aiAssistantService.IsLoading || _aiAssistantService.IsInitializing)">
                 <span class="oi oi-plus" aria-hidden="true"></span> 開新對話
             </button>
@@ -67,7 +67,7 @@
     </div>
 </div>
 
-@* [修改] 所有通知訊息的狀態都來自 _aiAssistantService *@
+@* 所有通知訊息的狀態都來自 _aiAssistantService *@
 @if (!string.IsNullOrEmpty(_aiAssistantService.NotificationMessage))
 {
     <div class="notification-bar @_aiAssistantService.NotificationCssClass">
@@ -75,7 +75,7 @@
     </div>
 }
 
-@* [修改] 確認對話框的狀態綁定到 _aiAssistantService *@
+@* 確認對話框的狀態綁定到 _aiAssistantService *@
 @if (_aiAssistantService.ShowNewChatConfirm)
 {
     <div class="settings-modal-backdrop">
@@ -94,7 +94,7 @@
     </div>
 }
 
-@* [修改] 設定視窗的狀態和資料都綁定到 _aiAssistantService *@
+@* 設定視窗的狀態和資料都綁定到 _aiAssistantService *@
 @if (_aiAssistantService.ShowSettingsModal)
 {
     <div class="settings-modal-backdrop">
@@ -188,7 +188,7 @@
     // [移除] 移除所有 C# 邏輯，只留下與元件生命週期和 UI 更新相關的程式碼
 
     [CascadingParameter]
-    public MainLayout? Layout { get; set; }
+    public HWDPortalMaui.Components.Layout.MainLayout? Layout { get; set; }
 
     protected override void OnInitialized()
     {

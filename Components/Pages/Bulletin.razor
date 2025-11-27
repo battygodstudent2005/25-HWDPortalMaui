@@ -130,6 +130,7 @@ else
                             <div class="input-group">
                                 <span class="input-group-text">部門</span>
                                 <select class="form-select" @bind="newBulletinDepartment">
+                                    <option value="HWD">HWD</option>
                                     <option value="HW">HW</option>
                                     <option value="PWR">PWR</option>
                                 </select>
@@ -214,7 +215,7 @@ else
 
 @code {
     [CascadingParameter] // 宣告一個屬性來接收從上層 MainLayout 傳來的串聯參數
-    public MainLayout? Layout { get; set; }
+    public HWDPortalMaui.Components.Layout.MainLayout? Layout { get; set; }
 
     // 定義一個唯讀的管理員清單 (使用 HashSet 效能較佳)
     private readonly HashSet<string> AdminList = new() { "Chain_Liu", "Yosna_Hsieh", "HankC_Huang", "Sonia_Tsai" };

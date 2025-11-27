@@ -1,0 +1,55 @@
+﻿@inject NavigationManager Navigation
+
+@* 頂部品牌區：調整 Class 與 NavMenu 一致 *@
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand d-flex align-items-center" href="#">
+            @* 將 icon 改為 i 標籤並調整 Class *@
+            <i class="bi bi-cpu-fill nav-icon me-2"></i>
+            <span>EE Design Check Tool</span>
+        </a>
+    </div>
+</div>
+
+@* 加入漢堡選單按鈕 (供 Mobile 版使用，保持結構一致) *@
+<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+
+@* 加入 onclick 事件以支援 Mobile 收合 *@
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    @* 加入 d-flex 與 style="min-height: 100%;" 讓 nav 填滿高度，這樣 mt-auto 才能將最後一項推到底部 *@
+    <nav class="d-flex flex-column" style="min-height: 100%;">
+        <div class="nav-item px-3">
+            @* 加入 d-flex align-items-center 確保垂直置中 *@
+            @* 將 href 修改為 EEDeisgnCheckTool_Home 定義的路由 *@
+            <NavLink class="nav-link d-flex align-items-center" href="ee-design-check-tool/home" Match="NavLinkMatch.All">
+                @* 將 span 改為 i 標籤，這對 CSS 對齊很重要 *@
+                <i class="bi bi-house-door-fill nav-icon me-3" aria-hidden="true"></i>
+                <span>首頁</span>
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link d-flex align-items-center" href="ee-design-check-tool/smbus-i2c-design-check">
+                <i class="bi bi-eye nav-icon me-3" aria-hidden="true"></i>
+                <span>SMBus/I2C Check</span>
+            </NavLink>
+        </div>
+
+        @* 底部退出按鈕 *@
+        <div class="nav-item px-3 mt-auto">
+            @* 加入 d-flex align-items-center *@
+            <button class="nav-link btn-link border-0 w-100 d-flex align-items-center text-start text-white" @onclick="ExitTool">
+                <i class="bi bi-box-arrow-left nav-icon me-3"></i>
+                <span>退出工具</span>
+            </button>
+        </div>
+    </nav>
+</div>
+
+@code {
+    // 退出邏輯
+    private void ExitTool()
+    {
+        Navigation.NavigateTo("automation");
+    }
+}

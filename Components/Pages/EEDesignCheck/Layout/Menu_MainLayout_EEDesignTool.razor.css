@@ -1,0 +1,102 @@
+﻿/* 漢堡選單按鈕樣式 (複製自 NavMenu.razor.css 以支援 Mobile) */
+.navbar-toggler {
+    appearance: none;
+    cursor: pointer;
+    width: 3.5rem;
+    height: 2.5rem;
+    color: white;
+    position: absolute;
+    top: 0.5rem;
+    right: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28255, 255, 255, 0.55%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e") no-repeat center/1.75rem rgba(255, 255, 255, 0.1);
+}
+
+    .navbar-toggler:checked {
+        background-color: rgba(255, 255, 255, 0.5);
+    }
+
+/* 頂部區域背景色，與 NavMenu 一致 */
+.top-row {
+    height: 3.5rem;
+    background-color: rgba(0,0,0,0.4);
+}
+
+.navbar-brand {
+    font-size: 1.1rem;
+}
+
+/* [關鍵] 保留並優化圖示樣式，確保縮放時對齊 */
+.nav-icon {
+    font-size: 1.2rem;
+    width: 1.5rem;
+    text-align: center;
+    flex-shrink: 0;
+    line-height: 1; /* [修改] 確保圖示垂直置中 */
+}
+
+/* [修改] 調整 NavItem 間距結構，與 NavMenu 一致 */
+.nav-item {
+    font-size: 0.9rem;
+    padding-bottom: 0.5rem;
+}
+
+    .nav-item:first-of-type {
+        padding-top: 1rem;
+    }
+
+    .nav-item:last-of-type {
+        padding-bottom: 1rem;
+    }
+
+    /* [修改] 統一 NavLink 樣式 (高度、顏色、Hover效果) */
+    .nav-item ::deep .nav-link {
+        color: #d7d7d7;
+        background: none;
+        border: none;
+        border-radius: 4px;
+        height: 3rem; /* 與 NavMenu 一致的高度 */
+        display: flex;
+        align-items: center;
+        line-height: 3rem;
+        width: 100%;
+        padding: 0 1rem; /* 左右 Padding */
+        white-space: nowrap; /* 防止文字換行 */
+    }
+
+    /* Active 狀態樣式 */
+    .nav-item ::deep a.active {
+        background-color: rgba(255,255,255,0.37);
+        color: white;
+    }
+
+    /* Hover 狀態樣式 */
+    .nav-item ::deep .nav-link:hover {
+        background-color: rgba(255,255,255,0.1);
+        color: white;
+    }
+
+/* Mobile 收合邏輯 */
+.nav-scrollable {
+    display: none;
+}
+
+.navbar-toggler:checked ~ .nav-scrollable {
+    display: block;
+}
+
+/* Desktop 響應式設定 (大於 641px) */
+@media (min-width: 641px) {
+    .navbar-toggler {
+        display: none;
+    }
+
+    .nav-scrollable {
+        /* 在大螢幕上永遠顯示 */
+        display: block;
+        /* 允許長選單滾動 */
+        height: calc(100vh - 3.5rem);
+        overflow-y: auto;
+        overflow-x: hidden;
+    }
+}

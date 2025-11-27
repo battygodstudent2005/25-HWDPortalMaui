@@ -656,7 +656,7 @@
 @code {
     // 宣告一個屬性來接收從上層 MainLayout 傳來的串聯參數
     [CascadingParameter] 
-    public MainLayout? Layout { get; set; }
+    public HWDPortalMaui.Components.Layout.MainLayout? Layout { get; set; }
 
     // 用於追蹤 "發送專案Status" 按鈕的載入狀態
     private bool isSendingStatus = false;
@@ -3910,7 +3910,7 @@
             return;
         }
 
-        // [修改] 組合目標資料表名稱 (加入 PWR2_A32 與 Phase Rule 的判斷)
+        // 組合目標資料表名稱 (加入 PWR2_A32 與 Phase Rule 的判斷)
         string tableName = string.Empty;
 
         if (SelectedYear <= 2025)
@@ -3945,7 +3945,7 @@
             }
             else
             {
-                // [修改] 針對其他部門的原有邏輯
+                // 針對其他部門的原有邏輯
                 if (SelectedPhaseRule == "3-Phase")
                 {
                     tableName += "_3Phase";
