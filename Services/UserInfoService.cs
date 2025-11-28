@@ -34,6 +34,9 @@
         public bool IsInitialized { get; private set; } = false;
         public DateTime SQLdatatime { get; private set; } = DateTime.MinValue;
 
+        // 用於儲存錯誤訊息 (例如資料庫連線失敗)
+        public string? ErrorMessage { get; private set; }
+
         // 伺服器端的事件處理比較複雜，為了簡化，我們先專注於讓程式能啟動
         // 在伺服器端靜態渲染時，事件通知 (event) 不是主要問題
 
@@ -43,10 +46,21 @@
             if (IsInitialized) return;
 
             UserName = userName;
+            // 重置錯誤訊息
+            ErrorMessage = null;
             try
             {
                 // 在伺服器端，我們直接呼叫資料庫存取方法
                 DataTable membertable = await ReadSQLdataAsync("MEM_ALL");
+
+                // 檢查是否成功讀取到資料表，ReadSQLdataAsync 失敗會回傳 null
+                if (membertable == null)
+                {
+                    ErrorMessage = "無法連接至 SQL 資料庫或讀取 'MEM_ALL' 失敗。請檢查伺服器狀態或網路連線。";
+                    IsUserValid = false;
+                    return; // 提早結束，避免後續 NullReferenceException
+                }
+
                 DataRow? userRow = null;
                 foreach (DataRow row in membertable.Rows)
                 {
@@ -72,7 +86,10 @@
             }
             catch (Exception ex)
             {
+                // 將錯誤訊息記錄下來，以便前端顯示
+                ErrorMessage = $"載入使用者資訊時發生未預期的例外: {ex.Message}";
                 Console.WriteLine($"Error loading user info directly from DB: {ex.Message}");
+                IsUserValid = false;
             }
             finally
             {
