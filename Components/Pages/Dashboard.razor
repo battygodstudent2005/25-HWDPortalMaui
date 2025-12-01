@@ -3917,18 +3917,18 @@
         {
             if (SelectedHwOption == "PWR2_A32")
             {
-                tableName = $"ProjectDashboard_A31_HWD_{SelectedHwOption}_SOW_A32_{SelectedYear}";
+                tableName = $"ProjectDashboard_{SelectedHwOption}_A32_{SelectedYear}";
             }
             else
             {
-                tableName = $"ProjectDashboard_A31_HWD_{SelectedHwOption}_SOW_{SelectedYear}";
+                tableName = $"ProjectDashboard_{SelectedHwOption}_{SelectedYear}";
             }
         }
         else
         {
-            tableName = $"ProjectDashboard_{SelectedHwOption}_{SelectedYear}";
             if (SelectedHwOption == "PWR2_A32")
             {
+                tableName = $"ProjectDashboard_{SelectedHwOption}_A32_{SelectedYear}";
                 // [新增] 針對 PWR2_A32 的特殊後綴判斷
                 if (SelectedPhaseRule == "3-Phase")
                 {
@@ -3945,6 +3945,7 @@
             }
             else
             {
+                tableName = $"ProjectDashboard_{SelectedHwOption}_{SelectedYear}";
                 // 針對其他部門的原有邏輯
                 if (SelectedPhaseRule == "3-Phase")
                 {
