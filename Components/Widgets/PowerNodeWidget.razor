@@ -1,0 +1,45 @@
+﻿@using Blazor.Diagrams.Components.Renderers
+@using HWDPortalMaui.Components.Pages.EEDesignCheck
+
+<div class="power-node-circle" title="@Node.Title">
+    <span class="power-icon">⚡</span>
+
+    @foreach (var port in Node.Ports)
+    {
+        @* 渲染連接埠 *@
+        <PortRenderer @key="port" Port="port" />
+    }
+</div>
+
+<style>
+    .power-node-circle {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%; /* 變成圓形 */
+        background-color: #dc3545; /* 紅色背景代表電源 */
+        border: 2px solid #b02a37;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        position: relative;
+    }
+
+    .power-icon {
+        color: white;
+        font-size: 1.2rem;
+        pointer-events: none; /* 避免圖示干擾拖曳 */
+    }
+
+    /* 調整 Port 的位置使其貼合圓形邊緣 (選擇性) */
+    ::deep .diagram-port {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background-color: rgba(255, 255, 255, 0.8);
+    }
+</style>
+
+@code {
+    [Parameter] public PowerNodeModel Node { get; set; } = null!;
+}

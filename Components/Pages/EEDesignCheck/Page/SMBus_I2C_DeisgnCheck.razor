@@ -10,6 +10,7 @@
 @using Blazor.Diagrams.Core.Geometry
 @using Blazor.Diagrams.Core.Models
 @using Blazor.Diagrams.Components
+@using HWDPortalMaui.Components.Widgets
 
 <PageTitle>SMBus/I2C Design Check Tool</PageTitle>
 
@@ -61,8 +62,6 @@
 
                                 @* 原有的 InputFile 區塊 *@
                                 <div class="mb-3">
-                                    @* [移除] <InputFile OnChange="HandleFileSelected" class="form-control" accept=".dsn, .net" /> *@
-
                                     @* 改用按鈕呼叫 MAUI 原生檔案選擇器 *@
                                     <button class="btn btn-outline-primary w-100 py-2" @onclick="PickFile">
                                         <i class="bi bi-folder2-open"></i> 選擇 DSN 或 NET 檔案
@@ -115,25 +114,34 @@
                     </div>
                     <div class="card-body bg-light">
                         <div class="row g-3">
-                            @* CPU 輸入框 *@
-                            <div class="col-md-4">
-                                <label for="inputCPU" class="form-label fw-bold">CPU Ref Des:</label>
-                                <input type="text" class="form-control" id="inputCPU" @bind="CpuRef" placeholder="Ex: UC1" />
-                                <div class="form-text">輸入 CPU 在線路圖上的位置號 (如 UC1)</div>
+                            @* Part 輸入框 *@
+                            <div class="col-md-3">
+                                <label for="inputPart" class="form-label fw-bold">Part Ref Des:</label>
+                                @* 修改綁定變數為 PartRef *@
+                                <input type="text" class="form-control" id="inputPart" @bind="PartRef" placeholder="Ex: UC1" />
+                                <div class="form-text">輸入指定元件在線路圖上的位置號 (如 UC1)</div>
                             </div>
-                            @* PCH 輸入框 *@
-                            <div class="col-md-4">
-                                <label for="inputPCH" class="form-label fw-bold">PCH Ref Des:</label>
-                                <input type="text" class="form-control" id="inputPCH" @bind="PchRef" placeholder="Ex: PCH1" />
-                                <div class="form-text">輸入 PCH 在線路圖上的位置號 (如 PCH1)</div>
+                            @* targetRefNet 名稱篩選視窗 UI *@
+                            <div class="col-md-3">
+                                <label for="inputNetFilter" class="form-label fw-bold">Net Name Filter:</label>
+                                <input type="text" class="form-control" id="inputNetFilter" @bind="NetNameFilter" placeholder="" />
+                                <div class="form-text">輸入 Net 名稱關鍵字 (如 SMBCLK)</div>
                             </div>
-                            @* EC 輸入框 *@
-                            <div class="col-md-4">
-                                <label for="inputEC" class="form-label fw-bold">EC Ref Des:</label>
-                                <input type="text" class="form-control" id="inputEC" @bind="EcRef" placeholder="Ex: UE1" />
-                                <div class="form-text">輸入 EC 在線路圖上的位置號 (如 UE1)</div>
-                            </div>
+                            @* Net Name 下拉選單 *@
+                            <div class="col-md-3">
+                                <label for="selectNetName" class="form-label fw-bold">Net Name Select:</label>
+                                @* 綁定 SelectedNetName *@
+                                <select class="form-select" id="selectNetName" @bind="SelectedNetName">
+                                    <option value="">-- 請選擇 Net --</option>
 
+                                    @* 改為遍歷經過篩選的 FilteredNetNames 屬性 *@
+                                    @foreach (var netName in FilteredNetNames)
+                                    {
+                                        <option value="@netName">@netName</option>
+                                    }
+                                </select>
+                                <div class="form-text">顯示連接 @PartRef 的 Net</div>
+                            </div>
                             @* 啟動按鈕置於 Group 內右下方 *@
                             <div class="col-12 text-end mt-3">
                                 <button class="btn btn-success" @onclick="RunTopologyCheck">
@@ -319,10 +327,14 @@
     // 儲存解析後的 NetList 資料 ContentNetListArray[N] 的 範例內容為 [2][0] = NET_NAME("+0.9V_TBT_B_SVR"), [2][1] = Location ^ Pin ("RT176^1"), ... [2][X-1] = Location ^ Pin ("CT77^1"), 共有X-1個元件 在NET_NAME[0]上面
     private List<List<string>> ContentNetListArray = new List<List<string>>();
 
+    // targetRefNet 名稱篩選變數 (目前僅用於 UI 綁定，內容維持空白)
+    private string NetNameFilter { get; set; } = string.Empty;
+
+    // Net Name 下拉選單綁定變數
+    private string SelectedNetName { get; set; } = string.Empty;
+
     // 預設值可依據專案習慣設定，或留空
-    private string CpuRef { get; set; } = "UC1";
-    private string PchRef { get; set; } = "";
-    private string EcRef { get; set; } = "UE1";
+    private string PartRef { get; set; } = "UC1";
 
     // 定義 OrCAD 轉檔相關路徑 (建議之後可移至設定檔)
     private const string TempFolderPath = @"C:\powertooltemp";
@@ -386,6 +398,48 @@
         }
     }
 
+    // 動態篩選清單屬性：根據 PartRef 與 Filter 關鍵字過濾
+    private IEnumerable<string> FilteredNetNames
+    {
+        get
+        {
+            // 若無資料直接回傳空
+            if (ContentNetListArray == null) return Enumerable.Empty<string>();
+
+            var targetPart = PartRef?.Trim();
+            var filterText = NetNameFilter?.Trim();
+
+            // 查詢 ContentNetListArray
+            return ContentNetListArray
+                .Where(row =>
+                {
+                    if (row.Count == 0) return false;
+                    string netName = row[0];
+
+                    // 條件 1: 若有輸入篩選字串，需檢查 Net Name 是否包含該字串 (忽略大小寫)
+                    if (!string.IsNullOrEmpty(filterText) && 
+                        !netName.Contains(filterText, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return false;
+                    }
+
+                    // 條件 2: 檢查該 Net 是否有連接到指定的 PartRef
+                    // row 的結構: [0]=NetName, [1...N]="Ref^Pin"
+                    if (!string.IsNullOrEmpty(targetPart))
+                    {
+                        // 檢查 row 中是否有任何一個 Pin 屬於 targetPart
+                        bool isConnected = row.Skip(1).Any(pinStr => 
+                            pinStr.StartsWith(targetPart + "^", StringComparison.OrdinalIgnoreCase));
+                        
+                        if (!isConnected) return false;
+                    }
+
+                    return true;
+                })
+                .Select(row => row[0]); // 只取出 Net Name
+        }
+    }
+
     private void ZoomReset()
     {
         if (MyDiagram != null)
@@ -415,7 +469,7 @@
         try
         {
             // 步驟 1: 建立暫存資料夾
-            CreatePowerToolTempFolder(TempFolderPath);
+            ResetTempFolder(TempFolderPath);
 
             // 步驟 2: 判斷副檔名並決定儲存檔名
             // Form1 邏輯：DSN 需命名為 0.DSN 以配合 Script; NET 檔則依原名或直接存入
@@ -496,7 +550,7 @@
         {
             isAnalyzing = false;
             // 開發階段建議保留暫存檔以便除錯，正式發布可取消註解下方清除指令
-            // CreatePowerToolTempFolder(TempFolderPath);
+            ResetTempFolder(TempFolderPath);
         }
     }
     // 設定 OrCAD Config 子程式：複製網路磁碟上的設定檔到本機 Cadence 目錄
@@ -554,11 +608,14 @@
         // 判斷是否整體失敗
         public bool IsOverallFail => PowerRailStatus == CheckStatus.Fail || PullUpStatus == CheckStatus.Fail || VgsStatus == CheckStatus.Fail;
     }
-    // 輔助方法：判斷是否為感興趣的 Net (包含 SMB, I2C, SCL, SDA 等)
+    // 輔助方法：判斷是否為感興趣的 Net (讀取 SelectedNetName)
     private bool IsInterestingNet(string netName)
     {
-        var upper = netName.ToUpper();
-        return upper.Contains("SMBCLK");
+        // 若使用者未選擇任何 Net (SelectedNetName 為空)，則回傳 false
+        if (string.IsNullOrEmpty(SelectedNetName)) return false;
+
+        // 直接比對傳入的 netName 是否等於使用者選擇的 SelectedNetName (忽略大小寫)
+        return netName.Equals(SelectedNetName, StringComparison.OrdinalIgnoreCase);
     }
 
     // 輔助方法：過濾電源與地線，避免拓撲圖發散
@@ -573,23 +630,27 @@
         return false;
     }
     // RunTopologyCheck 方法，改為支援多層級追蹤
-    private void RunTopologyCheck()
+    private async Task RunTopologyCheck()
     {
         try
         {
             // 強制重置圖表狀態
             isDiagramReady = false;
+            // 明確將 MyDiagram 設為 null
+            MyDiagram = null;
             StateHasChanged();
 
-            analysisMessage = $"正在執行深度拓撲檢查... 目標: CPU[{CpuRef}], PCH[{PchRef}], EC[{EcRef}]";
-            // 確保舊的 Diagram 物件事件被移除，避免記憶體洩漏 (雖然後面會 new 新的，但養成好習慣)
-            if (MyDiagram != null)
-            {
-                MyDiagram.SelectionChanged -= OnSelectionChanged;
-            }
+            // 加入短暫延遲 (例如 50ms)。
+            //這會強制讓 UI 執行緒先完成 "隱藏圖表" 的渲染動作，避免新舊圖表切換時 DOM 未即時更新。
+            await Task.Delay(50);
+
+            analysisMessage = $"正在執行深度拓撲檢查... 目標: Part[{PartRef}]";
 
             // 初始化 Diagram
             MyDiagram = new BlazorDiagram();
+
+            // 註冊 PowerNodeModel 對應的 Widget
+            MyDiagram.RegisterComponent<PowerNodeModel, PowerNodeWidget>();
 
             // 註冊選取變更事件，用於點擊 Highlight 功能
             MyDiagram.SelectionChanged += OnSelectionChanged;
@@ -609,23 +670,24 @@
             // 建立節點查找表，避免重複建立 Node (Key: RefDes, Value: NodeModel)
             Dictionary<string, NodeModel> nodeLookup = new Dictionary<string, NodeModel>();
 
-            // 定義 CPU 預設位置
+            // 定義 起點 預設位置
             int startX = 50;
             int startY = 300;
-            string targetCpuRef = string.IsNullOrEmpty(CpuRef) ? "CPU" : CpuRef;
+            // 取得目標元件 Ref (將 CpuRef 改為 PartRef)
+            string targetRef = string.IsNullOrEmpty(PartRef) ? "U1" : PartRef;
 
             // 建立 Root (CPU) 節點
             var cpuNode = new NodeModel(position: new Point(startX, startY))
             {
-                Title = targetCpuRef,
+                Title = targetRef,
                 Locked = true
             };
             var cpuPort = cpuNode.AddPort(PortAlignment.Right); // CPU 輸出埠
             MyDiagram.Nodes.Add(cpuNode);
 
             // 加入查找表與已訪問清單
-            nodeLookup.Add(targetCpuRef, cpuNode);
-            visitedComponents.Add(targetCpuRef);
+            nodeLookup.Add(targetRef, cpuNode);
+            visitedComponents.Add(targetRef);
 
             // 定義 BFS 佇列
             // Tuple 結構: (當前元件 Ref, 來源節點 NodeModel, 來源 PortModel, 連接過來的 Net 名稱, 目前層級 Layer)
@@ -646,7 +708,7 @@
                     bool isCpuInThisNet = false;
                     for (int i = 1; i < netRow.Count; i++)
                     {
-                        if (netRow[i].Split('^')[0].Equals(targetCpuRef, StringComparison.OrdinalIgnoreCase))
+                        if (netRow[i].Split('^')[0].Equals(targetRef, StringComparison.OrdinalIgnoreCase))
                         {
                             isCpuInThisNet = true;
                             break;
@@ -659,7 +721,7 @@
                         foreach (var pinInfo in netRow.Skip(1)) // 跳過 netName
                         {
                             string compRef = pinInfo.Split('^')[0];
-                            if (!compRef.Equals(targetCpuRef, StringComparison.OrdinalIgnoreCase))
+                            if (!compRef.Equals(targetRef, StringComparison.OrdinalIgnoreCase))
                             {
                                 // 加入佇列，準備在 While 迴圈中建立節點
                                 bfsQueue.Enqueue((compRef, cpuNode, cpuPort, netName, 1));
@@ -795,14 +857,14 @@
                         int nodeY = layerYPositions[nextLayer];
 
                         // 建立電源節點
-                        var powerNode = new NodeModel(position: new Point(nodeX, nodeY))
+                        // 改用 PowerNodeModel 來建立圓形節點
+                        // var powerNode = new NodeModel(position: new Point(nodeX, nodeY))
+                        var powerNode = new PowerNodeModel(position: new Point(nodeX, nodeY))
                         {
+                            // 將 Title 設為 NetName 以便在 Tooltip 顯示，但在 Widget 中可選擇不顯示文字
                             Title = nextNetName,
                             Locked = true
                         };
-
-                        // 加上特定 Class 以便未來可以用 CSS 將其變成圓形或不同顏色
-                        // powerNode.CssClass = "power-node";
 
                         var powerInputPort = powerNode.AddPort(PortAlignment.Left);
                         MyDiagram.Nodes.Add(powerNode);
@@ -818,8 +880,8 @@
                         // 加入 Net Name 標籤
                         pLink.Labels.Add(new Blazor.Diagrams.Core.Models.LinkLabelModel(pLink, nextNetName)
                         {
-                            Distance = 0.5,
-                            Offset = new Point(0, -10)
+                            Distance = 1.00,
+                            Offset = new Point(-60, -40)
                         });
                         MyDiagram.Links.Add(pLink);
 
@@ -838,7 +900,7 @@
 
                         // 避免回頭路：不要加自己，也不要加 CPU
                         if (!nextCompRef.Equals(currentRef, StringComparison.OrdinalIgnoreCase) &&
-                            !nextCompRef.Equals(targetCpuRef, StringComparison.OrdinalIgnoreCase))
+                            !nextCompRef.Equals(targetRef, StringComparison.OrdinalIgnoreCase))
                         {
                             bfsQueue.Enqueue((nextCompRef, currentNode, outputPort, nextNetName, currentLayer + 1));
                         }
@@ -850,11 +912,19 @@
 
             // 恢復刷新並重繪
             MyDiagram.SuspendRefresh = false;
-            MyDiagram.Refresh();
-
+            // 1. 先設定 Flag 讓 UI 顯示 Canvas
             isDiagramReady = true;
             analysisMessage = $"拓撲檢查完成！已產生 {MyDiagram.Nodes.Count} 個節點，{MyDiagram.Links.Count} 條連線 (深度: {maxDepth})。";
+
+            // 2. 強制 UI 渲染 (此時 <DiagramCanvas> 會被加入 DOM，但位置尚未計算完全)
             StateHasChanged();
+
+            // 3. 關鍵：等待 DOM 渲染完成 (給予瀏覽器 Layout 時間)
+            // 電源節點是自定義 Widget，需要實際渲染後才能取得 Port 的正確座標
+            await Task.Delay(50);
+
+            // 4. 現在 DOM 元素都存在了，執行 Refresh 來計算連線路徑
+            MyDiagram.Refresh();
         }
         catch (Exception ex)
         {
@@ -1057,7 +1127,7 @@
         CheckStatus.Warning => "bg-warning text-dark",
         _ => "bg-secondary"
     };
-    // 讀取並處理 DSN 檔案 (移植自 Form1.cs)
+    // 讀取並處理 DSN 檔案
     private void ReadNetList_DSN(string _DSNfile)
     {
         // 定義 CMD Command
@@ -1079,11 +1149,24 @@
         }
         catch (Exception ex)
         {
+            // 容錯機制：OrCAD 24.1 可能會輸出大量 Web/License 雜訊導致誤判失敗
+            // 這裡檢查目標檔案 "0.NET" 是否已經順利產生
+            string expectedOutputFile = Path.Combine(TempFolderPath, "0.NET");
+
+            if (File.Exists(expectedOutputFile))
+            {
+                // 若檔案存在，代表轉檔其實成功了，忽略這個錯誤
+                // 您可以使用 Console.WriteLine 或 Debug.WriteLine 紀錄一下
+                Debug.WriteLine($"[Warning] OrCAD 雖然回報錯誤但檔案已產生，忽略錯誤。訊息: {ex.Message}");
+                return;
+            }
+
+            // 若檔案真的不存在，才拋出例外
             throw new Exception($"ReadNetList_DSN 執行失敗: {ex.Message}");
         }
     }
 
-    // 執行 CMD 指令 (移植自 Form1.cs)
+    // 執行 CMD 指令
     private void RunScriptUsingCMD(string cmdCommand)
     {
         using (Process process = new Process())
@@ -1203,8 +1286,8 @@
         return ret;
     }
 
-    // 建立/清空暫存資料夾 (移植自 Form1.cs)
-    private void CreatePowerToolTempFolder(string directoryPath)
+    // 建立/清空暫存資料夾
+    private void ResetTempFolder(string directoryPath)
     {
         try
         {
